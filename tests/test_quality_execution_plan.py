@@ -5,6 +5,8 @@ import pytest
 from rda.quality.contracts import Applicability, Assessment, ExecutionState, UnitResult
 from rda.quality.execution_plan import (
     AttemptRecord,
+    ExecutionPlan,
+    PlanUnit,
     build_plan,
     coverage_summary,
     validate_terminal_results,
@@ -17,8 +19,8 @@ def _unit(group="camera.front"):
         "metric": "visual_quality",
         "camera_or_dimension_group": group,
         "input_references": {"media": "videos/front.mp4"},
-        "requested_config_hash": "requested-abc",
-        "effective_config_hash": "effective-def",
+        "requested_config_hash": "sha256:" + "a" * 64,
+        "effective_config_hash": "sha256:" + "b" * 64,
         "sampling_range": {"start": 0, "end": 10},
         "resource_estimate": {"frames": 10},
     }
@@ -39,6 +41,40 @@ def _result(plan_unit_id, state=ExecutionState.COMPUTED):
 
 def test_same_plan_input_generates_same_id():
     assert build_plan([_unit()]).units[0].plan_unit_id == build_plan([_unit()]).units[0].plan_unit_id
+
+
+def test_direct_plan_unit_rejects_noncanonical_id():
+    with pytest.raises(ValueError, match="canonical"):
+        PlanUnit(plan_unit_id="arbitrary", **_unit())
+
+
+def test_direct_execution_plan_freezes_constructor_lists():
+    canonical_unit = build_plan([_unit()]).units[0]
+    units = [canonical_unit]
+    attempts = [AttemptRecord(canonical_unit.plan_unit_id, 1, "COMPUTED")]
+    plan = ExecutionPlan(units=units, attempts=attempts)
+    units.clear()
+    attempts.clear()
+    assert plan.units == (canonical_unit,)
+    assert len(plan.attempts) == 1
+
+
+def test_direct_execution_plan_rejects_duplicate_units_and_unknown_attempt_units():
+    unit = build_plan([_unit()]).units[0]
+    with pytest.raises(ValueError, match="duplicate"):
+        ExecutionPlan(units=[unit, unit])
+    with pytest.raises(ValueError, match="unknown plan_unit_id"):
+        ExecutionPlan(
+            units=[unit],
+            attempts=[AttemptRecord("quality-unit:" + "f" * 64, 1, "FAILED")],
+        )
+
+
+def test_plan_unit_requires_content_hash_config_identities():
+    spec = _unit()
+    spec["requested_config_hash"] = "requested-abc"
+    with pytest.raises(ValueError, match="requested_config_hash"):
+        build_plan([spec])
 
 
 def test_camera_or_dimension_group_participates_in_id():

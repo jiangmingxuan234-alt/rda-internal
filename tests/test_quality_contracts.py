@@ -39,13 +39,24 @@ def test_exclude_candidate_remains_quality_advice():
         applicability=Applicability.APPLICABLE,
         execution_state=ExecutionState.COMPUTED,
         assessment=Assessment.EXCLUDE_CANDIDATE,
-        coverage={"planned_samples": 10, "computed_samples": 10},
+        coverage={
+            "planned_samples": 10,
+            "attempted_samples": 10,
+            "computed_samples": 10,
+            "sampling_complete": True,
+        },
         measurement={"blur": 0.9},
         evidence=({"frame_range": [0, 10]},),
         reason_codes=("CALIBRATED_RULE_MATCH",),
         rule_id="blur-upper-bound",
         rule_version="blur-rule-v1",
-        rule_source={"kind": "calibrated_reference", "reference_id": "gold-v1"},
+        rule_source={
+            "kind": "calibrated_rule",
+            "rule_id": "blur-upper-bound",
+            "rule_version": "blur-rule-v1",
+            "calibration_id": "gold-v1",
+            "calibration_hash": "sha256:" + "a" * 64,
+        },
     )
 
     assert result.assessment.value == "EXCLUDE_CANDIDATE"
@@ -59,7 +70,12 @@ def test_unit_result_requires_plan_unit_id():
             applicability=Applicability.APPLICABLE,
             execution_state=ExecutionState.COMPUTED,
             assessment=Assessment.UNASSESSED,
-            coverage={"planned_samples": 1, "computed_samples": 1},
+            coverage={
+                "planned_samples": 1,
+                "attempted_samples": 1,
+                "computed_samples": 1,
+                "sampling_complete": True,
+            },
             measurement={"value": 1},
             evidence=(),
             reason_codes=(),
@@ -85,7 +101,12 @@ def test_computed_measurement_without_rule_is_unassessed():
             applicability=Applicability.APPLICABLE,
             execution_state=ExecutionState.COMPUTED,
             assessment=Assessment.PASS,
-            coverage={"planned_samples": 1, "computed_samples": 1},
+            coverage={
+                "planned_samples": 1,
+                "attempted_samples": 1,
+                "computed_samples": 1,
+                "sampling_complete": True,
+            },
             measurement={"value": 1.25},
             evidence=(),
             reason_codes=(),
@@ -114,13 +135,109 @@ def test_exclude_candidate_requires_calibrated_rule_source():
             applicability=Applicability.APPLICABLE,
             execution_state=ExecutionState.COMPUTED,
             assessment=Assessment.EXCLUDE_CANDIDATE,
-            coverage={"planned_samples": 1, "computed_samples": 1},
+            coverage={
+                "planned_samples": 1,
+                "attempted_samples": 1,
+                "computed_samples": 1,
+                "sampling_complete": True,
+            },
             measurement={"value": 1.25},
             evidence=(),
             reason_codes=("RULE_MATCH",),
             rule_id="rule-1",
             rule_version="1",
             rule_source={"kind": "provisional"},
+        )
+
+
+@pytest.mark.parametrize("assessment", [Assessment.PASS, Assessment.EXCLUDE_CANDIDATE])
+def test_calibrated_assessment_requires_explicit_complete_coverage(assessment):
+    with pytest.raises(ValueError, match="coverage"):
+        UnitResult(
+            plan_unit_id="unit-1",
+            applicability=Applicability.APPLICABLE,
+            execution_state=ExecutionState.COMPUTED,
+            assessment=assessment,
+            coverage={},
+            measurement={"value": 1.25},
+            evidence=(),
+            reason_codes=("CALIBRATED_RULE_MATCH",),
+            rule_id="rule-1",
+            rule_version="1",
+            rule_source={
+                "kind": "calibrated_rule",
+                "rule_id": "rule-1",
+                "rule_version": "1",
+                "calibration_id": "cal-1",
+                "calibration_hash": "sha256:" + "b" * 64,
+            },
+        )
+
+
+def test_calibration_provenance_is_tied_to_rule_identity_and_content_hash():
+    source = {
+        "kind": "calibrated_rule",
+        "rule_id": "different-rule",
+        "rule_version": "1",
+        "calibration_id": "cal-1",
+        "calibration_hash": "sha256:" + "b" * 64,
+    }
+    with pytest.raises(ValueError, match="rule_id"):
+        UnitResult(
+            plan_unit_id="unit-1",
+            applicability=Applicability.APPLICABLE,
+            execution_state=ExecutionState.COMPUTED,
+            assessment=Assessment.EXCLUDE_CANDIDATE,
+            coverage={
+                "planned_samples": 1,
+                "attempted_samples": 1,
+                "computed_samples": 1,
+                "sampling_complete": True,
+            },
+            measurement={"value": 1.25},
+            evidence=(),
+            reason_codes=("CALIBRATED_RULE_MATCH",),
+            rule_id="rule-1",
+            rule_version="1",
+            rule_source=source,
+        )
+
+    source["rule_id"] = "rule-1"
+    source["calibration_hash"] = "not-a-content-hash"
+    with pytest.raises(ValueError, match="calibration_hash"):
+        UnitResult(
+            plan_unit_id="unit-1",
+            applicability=Applicability.APPLICABLE,
+            execution_state=ExecutionState.COMPUTED,
+            assessment=Assessment.EXCLUDE_CANDIDATE,
+            coverage={
+                "planned_samples": 1,
+                "attempted_samples": 1,
+                "computed_samples": 1,
+                "sampling_complete": True,
+            },
+            measurement={"value": 1.25},
+            evidence=(),
+            reason_codes=("CALIBRATED_RULE_MATCH",),
+            rule_id="rule-1",
+            rule_version="1",
+            rule_source=source,
+        )
+
+
+def test_assessed_result_rule_identity_must_be_nonempty_strings():
+    with pytest.raises(ValueError, match="rule_id"):
+        UnitResult(
+            plan_unit_id="unit-1",
+            applicability=Applicability.APPLICABLE,
+            execution_state=ExecutionState.COMPUTED,
+            assessment=Assessment.REVIEW,
+            coverage={"planned_samples": 1, "computed_samples": 1},
+            measurement={"value": 1.25},
+            evidence=(),
+            reason_codes=("RULE_MATCH",),
+            rule_id=7,
+            rule_version="1",
         )
 
 
@@ -131,7 +248,12 @@ def test_partial_coverage_cannot_pass():
             applicability=Applicability.APPLICABLE,
             execution_state=ExecutionState.COMPUTED,
             assessment=Assessment.PASS,
-            coverage={"planned_samples": 10, "computed_samples": 9},
+            coverage={
+                "planned_samples": 10,
+                "attempted_samples": 10,
+                "computed_samples": 9,
+                "sampling_complete": False,
+            },
             measurement={"value": 1.25},
             evidence=(),
             reason_codes=("RULE_NO_MATCH",),
@@ -147,7 +269,12 @@ def test_pass_requires_calibrated_rule_source():
             applicability=Applicability.APPLICABLE,
             execution_state=ExecutionState.COMPUTED,
             assessment=Assessment.PASS,
-            coverage={"planned_samples": 10, "computed_samples": 10},
+            coverage={
+                "planned_samples": 10,
+                "attempted_samples": 10,
+                "computed_samples": 10,
+                "sampling_complete": True,
+            },
             measurement={"value": 1.25},
             evidence=(),
             reason_codes=("CALIBRATED_RULE_NO_MATCH",),
@@ -160,13 +287,24 @@ def test_pass_requires_calibrated_rule_source():
         applicability=Applicability.APPLICABLE,
         execution_state=ExecutionState.COMPUTED,
         assessment=Assessment.PASS,
-        coverage={"planned_samples": 10, "computed_samples": 10},
+        coverage={
+            "planned_samples": 10,
+            "attempted_samples": 10,
+            "computed_samples": 10,
+            "sampling_complete": True,
+        },
         measurement={"value": 1.25},
         evidence=(),
         reason_codes=("CALIBRATED_RULE_NO_MATCH",),
         rule_id="rule-1",
         rule_version="1",
-        rule_source={"calibration_status": "calibrated", "reference_id": "gold-v1"},
+        rule_source={
+            "kind": "calibrated_rule",
+            "rule_id": "rule-1",
+            "rule_version": "1",
+            "calibration_id": "gold-v1",
+            "calibration_hash": "sha256:" + "a" * 64,
+        },
     )
     assert result.assessment is Assessment.PASS
 

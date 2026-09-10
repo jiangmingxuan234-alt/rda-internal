@@ -29,6 +29,13 @@ def test_config_requires_contract_version():
         QualityConfig.from_mapping(value)
 
 
+def test_config_rejects_unknown_contract_version():
+    value = _config()
+    value["contract_version"] = 2
+    with pytest.raises(ValueError, match="unsupported contract_version"):
+        QualityConfig.from_mapping(value)
+
+
 def test_config_rejects_unknown_metric():
     value = _config()
     value["quality"]["metrics"][0]["name"] = "made_up_metric"
@@ -117,4 +124,141 @@ def test_rule_cannot_be_both_calibrated_and_provisional():
         "provisional": True,
     }
     with pytest.raises(ValueError, match="provisional"):
+        QualityConfig.from_mapping(value)
+
+
+@pytest.mark.parametrize(
+    "robot",
+    [
+        {"profile_id": 7, "cameras": ["front"]},
+        {"profile_id": "robot-1", "cameras": "front"},
+    ],
+)
+def test_declared_robot_profile_has_strict_identity_and_container_types(robot):
+    value = _config()
+    value["robot"] = robot
+    with pytest.raises(ValueError, match="robot"):
+        QualityConfig.from_mapping(value)
+
+
+@pytest.mark.parametrize(
+    ("field", "invalid"),
+    [
+        ("policy_type", ""),
+        ("padding", {"left": True}),
+        ("required_modalities", ["observation.state", 7]),
+    ],
+)
+def test_declared_training_profile_validates_identity_enums_and_members(field, invalid):
+    value = _config()
+    value["training"] = {
+        "policy_type": "act",
+        "observation_history": 1,
+        "horizon": 16,
+        "stride": 1,
+        "padding": "none",
+        "required_modalities": ["observation.state"],
+    }
+    value["training"][field] = invalid
+    with pytest.raises(ValueError, match=field):
+        QualityConfig.from_mapping(value)
+
+
+@pytest.mark.parametrize(
+    ("field", "invalid"),
+    [("rule_id", ""), ("version", ""), ("calibration_status", "invented")],
+)
+def test_rule_identity_and_calibration_status_are_strict(field, invalid):
+    value = _config()
+    value["quality"]["metrics"][0]["rule"] = {
+        "rule_id": "idle-v1",
+        "version": "1",
+        "scope": {"tasks": ["pick"]},
+        "thresholds": {"max": 0.9},
+        "calibration_status": "uncalibrated",
+        "provisional": False,
+    }
+    value["quality"]["metrics"][0]["rule"][field] = invalid
+    with pytest.raises(ValueError, match=field):
+        QualityConfig.from_mapping(value)
+
+
+def test_calibrated_rule_requires_content_bound_calibration_identity():
+    value = _config()
+    rule = {
+        "rule_id": "idle-v1",
+        "version": "1",
+        "scope": {"tasks": ["pick"]},
+        "thresholds": {"max": 0.9},
+        "calibration_status": "calibrated",
+        "provisional": False,
+    }
+    value["quality"]["metrics"][0]["rule"] = rule
+    with pytest.raises(ValueError, match="calibration"):
+        QualityConfig.from_mapping(value)
+
+    rule["calibration"] = {
+        "calibration_id": "gold-v1",
+        "calibration_hash": "sha256:" + "a" * 64,
+    }
+    config = QualityConfig.from_mapping(value)
+    assert config.quality["metrics"][0]["rule"]["calibration"]["calibration_id"] == "gold-v1"
+
+
+def test_structurally_complete_robot_profile_is_preserved():
+    value = _config()
+    value["robot"] = {
+        "profile_id": "robot-1",
+        "action_field": "action",
+        "state_field": "observation.state",
+        "action_representation": "absolute_position",
+        "coordinate_frame": "base",
+        "dimension_groups": {
+            "arm": {"indices": [0, 1], "physical_quantity": "angle", "unit": "rad"}
+        },
+        "cameras": ["observation.images.front"],
+    }
+    config = QualityConfig.from_mapping(value)
+    assert config.robot["profile_id"] == "robot-1"
+
+
+@pytest.mark.parametrize("field", ["reference_set", "sampling", "resource_budget"])
+def test_quality_profile_containers_must_be_mappings(field):
+    value = _config()
+    value["quality"][field] = "invalid"
+    with pytest.raises(ValueError, match=field):
+        QualityConfig.from_mapping(value)
+
+
+def test_rule_scope_members_are_strict_and_all_is_exclusive():
+    value = _config()
+    value["quality"]["metrics"][0]["rule"] = {
+        "rule_id": "idle-v1",
+        "version": "1",
+        "scope": {"tasks": "pick"},
+        "thresholds": {"max": 0.9},
+    }
+    with pytest.raises(ValueError, match="scope.tasks"):
+        QualityConfig.from_mapping(value)
+
+    value["quality"]["metrics"][0]["rule"]["scope"] = {
+        "all": True,
+        "tasks": ["pick"],
+    }
+    with pytest.raises(ValueError, match="scope.all"):
+        QualityConfig.from_mapping(value)
+
+
+def test_robot_dimension_group_members_are_structural():
+    value = _config()
+    value["robot"] = {
+        "profile_id": "robot-1",
+        "action_field": "action",
+        "state_field": "observation.state",
+        "action_representation": "absolute_position",
+        "coordinate_frame": "base",
+        "dimension_groups": {"arm": {}},
+        "cameras": ["observation.images.front"],
+    }
+    with pytest.raises(ValueError, match="dimension_groups.arm"):
         QualityConfig.from_mapping(value)

@@ -7,6 +7,7 @@ quality mode records applicability, execution and assessment independently.
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -185,36 +186,25 @@ class UnitResult:
             raise ValueError("non-applicable or unknown results require reason_codes")
         if self.execution_state is not ExecutionState.COMPUTED and self.assessment is not Assessment.UNASSESSED:
             raise ValueError("non-computed results must be UNASSESSED")
-        if self.assessment is not Assessment.UNASSESSED and not self.rule_version:
+        if self.assessment is not Assessment.UNASSESSED and (
+            not isinstance(self.rule_version, str) or not self.rule_version.strip()
+        ):
             raise ValueError("assessed results require rule_version")
-        if self.assessment is not Assessment.UNASSESSED and not self.rule_id:
+        if self.assessment is not Assessment.UNASSESSED and (
+            not isinstance(self.rule_id, str) or not self.rule_id.strip()
+        ):
             raise ValueError("assessed results require rule_id")
         if self.applicability is not Applicability.APPLICABLE and self.assessment is not Assessment.UNASSESSED:
             raise ValueError("non-applicable or unknown results must be UNASSESSED")
         if self.applicability is Applicability.NOT_APPLICABLE and measurement:
             raise ValueError("NOT_APPLICABLE results cannot publish measurement")
         source = rule_source if isinstance(rule_source, Mapping) else {}
-        calibrated_rule_source = (
-            source.get("calibrated") is True
-            or source.get("calibration_status") == "calibrated"
-            or source.get("kind") in {"calibrated_reference", "calibrated_rule"}
-        )
         if self.assessment is Assessment.PASS:
-            planned = coverage.get("planned_samples")
-            computed = coverage.get("computed_samples")
-            if coverage.get("complete") is False or (
-                isinstance(planned, (int, float))
-                and not isinstance(planned, bool)
-                and isinstance(computed, (int, float))
-                and not isinstance(computed, bool)
-                and computed < planned
-            ):
-                raise ValueError("partial coverage cannot produce PASS")
-            if not calibrated_rule_source:
-                raise ValueError("PASS requires a calibrated rule_source")
+            _validate_assessed_coverage(coverage)
+            _validate_calibrated_rule_source(source, self.rule_id, self.rule_version)
         if self.assessment is Assessment.EXCLUDE_CANDIDATE:
-            if not calibrated_rule_source:
-                raise ValueError("EXCLUDE_CANDIDATE requires a calibrated rule_source")
+            _validate_assessed_coverage(coverage)
+            _validate_calibrated_rule_source(source, self.rule_id, self.rule_version)
 
         object.__setattr__(self, "coverage", coverage)
         object.__setattr__(self, "measurement", measurement)
@@ -236,3 +226,66 @@ class UnitResult:
             "rule_version": self.rule_version,
             "rule_source": thaw_json(self.rule_source),
         }
+
+
+_CALIBRATED_SOURCE_FIELDS = {
+    "kind",
+    "rule_id",
+    "rule_version",
+    "calibration_id",
+    "calibration_hash",
+}
+_SHA256_PATTERN = re.compile(r"sha256:[0-9a-f]{64}\Z")
+
+
+def _validate_assessed_coverage(coverage: Mapping[str, Any]) -> None:
+    required = {
+        "planned_samples",
+        "attempted_samples",
+        "computed_samples",
+        "sampling_complete",
+    }
+    missing = sorted(required - set(coverage))
+    if missing:
+        raise ValueError(f"assessed result coverage missing fields: {missing}")
+    planned = coverage["planned_samples"]
+    attempted = coverage["attempted_samples"]
+    computed = coverage["computed_samples"]
+    if any(
+        isinstance(value, bool) or not isinstance(value, int) or value < 0
+        for value in (planned, attempted, computed)
+    ):
+        raise ValueError("assessed result coverage counts must be non-negative integers")
+    if planned == 0:
+        raise ValueError("assessed result coverage requires planned_samples > 0")
+    if coverage["sampling_complete"] is not True:
+        raise ValueError("partial coverage cannot produce calibrated assessment")
+    if not planned == attempted == computed:
+        raise ValueError("partial coverage cannot produce calibrated assessment")
+
+
+def _validate_calibrated_rule_source(
+    source: Mapping[str, Any],
+    rule_id: str | None,
+    rule_version: str | None,
+) -> None:
+    missing = sorted(_CALIBRATED_SOURCE_FIELDS - set(source))
+    unknown = sorted(set(source) - _CALIBRATED_SOURCE_FIELDS)
+    if missing or unknown:
+        raise ValueError(
+            "calibrated rule_source requires exact provenance fields; "
+            f"missing={missing}, unknown={unknown}"
+        )
+    if source["kind"] != "calibrated_rule":
+        raise ValueError("calibrated rule_source.kind must be calibrated_rule")
+    if source["rule_id"] != rule_id:
+        raise ValueError("calibrated rule_source.rule_id must match result rule_id")
+    if source["rule_version"] != rule_version:
+        raise ValueError(
+            "calibrated rule_source.rule_version must match result rule_version"
+        )
+    if not isinstance(source["calibration_id"], str) or not source["calibration_id"].strip():
+        raise ValueError("calibrated rule_source.calibration_id must be non-empty")
+    calibration_hash = source["calibration_hash"]
+    if not isinstance(calibration_hash, str) or not _SHA256_PATTERN.fullmatch(calibration_hash):
+        raise ValueError("calibrated rule_source.calibration_hash must be a sha256 content hash")

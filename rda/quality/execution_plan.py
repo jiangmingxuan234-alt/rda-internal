@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import re
 from collections import Counter
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping
@@ -15,6 +16,9 @@ from rda.quality.contracts import (
     freeze_json,
     thaw_json,
 )
+
+
+_SHA256_PATTERN = re.compile(r"sha256:[0-9a-f]{64}\Z")
 
 
 @dataclass(frozen=True)
@@ -37,11 +41,16 @@ class PlanUnit:
             value = getattr(self, name)
             if not isinstance(value, str) or not value.strip():
                 raise ValueError(f"{name} must be a non-empty string")
+        for name in ("requested_config_hash", "effective_config_hash"):
+            if not _SHA256_PATTERN.fullmatch(getattr(self, name)):
+                raise ValueError(f"{name} must be a sha256 content hash")
         for name in ("input_references", "sampling_range", "resource_estimate"):
             frozen = freeze_json(getattr(self, name), path=name)
             if not isinstance(frozen, FrozenDict):
                 raise TypeError(f"{name} must be a mapping")
             object.__setattr__(self, name, frozen)
+        if self.plan_unit_id != _unit_id(self.to_dict()):
+            raise ValueError("plan_unit_id must match canonical plan identity")
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -76,6 +85,40 @@ class AttemptRecord:
 class ExecutionPlan:
     units: tuple[PlanUnit, ...]
     attempts: tuple[AttemptRecord, ...] = ()
+
+    def __post_init__(self) -> None:
+        units = tuple(self.units)
+        attempts = tuple(self.attempts)
+        if any(not isinstance(unit, PlanUnit) for unit in units):
+            raise TypeError("ExecutionPlan.units must contain PlanUnit values")
+        if any(not isinstance(attempt, AttemptRecord) for attempt in attempts):
+            raise TypeError("ExecutionPlan.attempts must contain AttemptRecord values")
+        for unit in units:
+            if unit.plan_unit_id != _unit_id(unit.to_dict()):
+                raise ValueError("plan_unit_id must match canonical plan identity")
+        unit_ids = [unit.plan_unit_id for unit in units]
+        duplicate_units = sorted(
+            unit_id for unit_id, count in Counter(unit_ids).items() if count > 1
+        )
+        if duplicate_units:
+            raise ValueError(f"duplicate plan units: {duplicate_units}")
+        planned_ids = set(unit_ids)
+        unknown_attempt_ids = sorted(
+            {attempt.plan_unit_id for attempt in attempts} - planned_ids
+        )
+        if unknown_attempt_ids:
+            raise ValueError(
+                "attempt references unknown plan_unit_id: "
+                f"{unknown_attempt_ids}"
+            )
+        attempt_keys = [(attempt.plan_unit_id, attempt.attempt) for attempt in attempts]
+        duplicate_attempts = sorted(
+            key for key, count in Counter(attempt_keys).items() if count > 1
+        )
+        if duplicate_attempts:
+            raise ValueError(f"duplicate attempt records: {duplicate_attempts}")
+        object.__setattr__(self, "units", units)
+        object.__setattr__(self, "attempts", attempts)
 
     def validate_terminal_results(self, results: Iterable[UnitResult]) -> None:
         validate_terminal_results(self, results)
