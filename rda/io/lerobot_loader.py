@@ -37,6 +37,12 @@ from typing import Any, Dict, Iterator, List, Optional
 import numpy as np
 
 from rda.io.schema import DatasetInfo, EpisodeData
+from rda.quality.input_manifest import (
+    QualityInputError,
+    QualityInputManifest,
+    iter_episode_segments,
+    verify_source,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -250,6 +256,84 @@ _MISSING_PARQUET_DEPS = (
     "Direct parquet reading requires pandas and pyarrow. "
     "Install them with: pip install pandas pyarrow"
 )
+
+
+def iter_quality_episode_batches(
+    manifest: QualityInputManifest,
+    episode_id: int,
+    *,
+    columns: List[str],
+    batch_size: int = 65_536,
+) -> Iterator[Any]:
+    """Read verified v3 rows as one projected batch per manifest segment.
+
+    Unlike the legacy loader, this quality-only path never scans for a
+    fallback file, filters a whole file by episode, or synthesizes timestamps.
+    Each emitted batch is reconciled against its manifest coordinates; the
+    segment-wide task set and source identity are reconciled at stream end.
+    """
+    try:
+        import pyarrow.parquet as pq
+    except ImportError:
+        raise ImportError(_MISSING_PARQUET_DEPS) from None
+
+    if isinstance(batch_size, bool) or not isinstance(batch_size, int) or batch_size < 1:
+        raise ValueError("batch_size must be a positive integer")
+    required_identity = ["episode_index", "timestamp", "frame_index", "index", "task_index"]
+    projected = list(dict.fromkeys([*columns, *required_identity]))
+    for segment in iter_episode_segments(manifest, episode_id):
+        source = manifest.sources[segment.relative_path]
+        verify_source(source)
+        try:
+            parquet = pq.ParquetFile(segment.source_path)
+            schema_names = set(parquet.schema_arrow.names)
+            missing = [name for name in projected if name not in schema_names]
+            if missing:
+                raise QualityInputError(
+                    "unsupported_layout",
+                    f"quality row source lacks required original columns: {missing}",
+                    location=segment.relative_path,
+                )
+            if segment.row_group >= parquet.num_row_groups:
+                raise QualityInputError("unsupported_layout", "manifest row_group is outside the Parquet file", location=segment.relative_path)
+            if segment.row_end > parquet.metadata.row_group(segment.row_group).num_rows:
+                raise QualityInputError("unsupported_layout", "manifest row offsets exceed the Parquet row group", location=segment.relative_path)
+        except QualityInputError:
+            raise
+        except Exception as exc:
+            raise QualityInputError("unsupported_layout", f"cannot read declared Parquet segment: {exc}", location=segment.relative_path) from exc
+        row_offset = 0
+        selected_rows = 0
+        observed_tasks: set[int] = set()
+        try:
+            batches = parquet.iter_batches(batch_size=batch_size, row_groups=[segment.row_group], columns=projected)
+            for batch in batches:
+                batch_end = row_offset + batch.num_rows
+                take_start = max(segment.row_start, row_offset)
+                take_end = min(segment.row_end, batch_end)
+                row_offset = batch_end
+                if take_start >= take_end:
+                    continue
+                selected = batch.slice(take_start - (batch_end - batch.num_rows), take_end - take_start)
+                values = selected.to_pydict()
+                if any(value != episode_id for value in values["episode_index"]):
+                    raise QualityInputError("segment_identity_mismatch", "physical rows contain a different episode_index", location=segment.relative_path)
+                expected_globals = list(range(segment.global_from + selected_rows, segment.global_from + selected_rows + selected.num_rows))
+                expected_frames = list(range(segment.frame_from + selected_rows, segment.frame_from + selected_rows + selected.num_rows))
+                if values["index"] != expected_globals or values["frame_index"] != expected_frames:
+                    raise QualityInputError("segment_identity_mismatch", "physical row index bounds differ from the manifest", location=segment.relative_path)
+                observed_tasks.update(values["task_index"])
+                selected_rows += selected.num_rows
+                yield selected.select(columns)
+        except QualityInputError:
+            raise
+        except Exception as exc:
+            raise QualityInputError("unsupported_layout", f"cannot stream declared Parquet segment: {exc}", location=segment.relative_path) from exc
+        if selected_rows != segment.row_count or observed_tasks != set(segment.task_indexes):
+            raise QualityInputError("segment_identity_mismatch", "physical task_index values or row count differ from the manifest", location=segment.relative_path)
+        # The guard before opening binds the initial file; this second check
+        # reports a replacement that happened while the stream was consumed.
+        verify_source(source)
 
 
 # ---------------------------------------------------------------------------
