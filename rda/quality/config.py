@@ -123,7 +123,9 @@ class QualityConfig:
         if "contract_version" not in root:
             raise ValueError("contract_version is required")
         version = root["contract_version"]
-        if version != 1 or isinstance(version, bool):
+        if isinstance(version, bool) or not isinstance(version, int):
+            raise ValueError("contract_version must be an integer")
+        if version != 1:
             raise ValueError(f"unsupported contract_version: {version!r}; supported: 1")
         if "quality" not in root:
             raise ValueError("quality is required")

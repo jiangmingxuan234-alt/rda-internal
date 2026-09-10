@@ -36,6 +36,13 @@ def test_config_rejects_unknown_contract_version():
         QualityConfig.from_mapping(value)
 
 
+def test_config_rejects_float_contract_version_equal_to_supported_integer():
+    value = _config()
+    value["contract_version"] = 1.0
+    with pytest.raises(ValueError, match="contract_version must be an integer"):
+        QualityConfig.from_mapping(value)
+
+
 def test_config_rejects_unknown_metric():
     value = _config()
     value["quality"]["metrics"][0]["name"] = "made_up_metric"
