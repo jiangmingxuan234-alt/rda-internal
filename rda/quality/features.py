@@ -6,12 +6,13 @@ are owned by the later assessment layer.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Iterable, Mapping
+from typing import Any, Mapping
 
 import numpy as np
 
 from rda.io.schema import EpisodeData
 from rda.quality.config import QualityConfig
+from rda.quality.visual_features import VisualFeatures, compute_visual_features
 
 
 ALGORITHM_VERSION = "quality-features-v1"
@@ -22,15 +23,6 @@ class SharedFeatures:
     numeric: Mapping[str, Any]
     visual: Mapping[str, Any]
     semantic_status: str
-
-
-@dataclass(frozen=True)
-class VisualFeatures:
-    frames: tuple[Mapping[str, Any], ...]
-    failures: tuple[Mapping[str, Any], ...]
-    coverage: Mapping[str, int]
-    low_change_spans: tuple[Mapping[str, int], ...]
-    preprocess: Mapping[str, Any]
 
 
 def _stat(values: np.ndarray) -> dict[str, Any]:
@@ -143,44 +135,3 @@ def compute_shared_features(episode: EpisodeData, config: QualityConfig, *, prod
         numeric[kind] = {"status": "ok", "dimensions": dimensions, "representation": representation}
     return SharedFeatures(numeric=numeric, visual={}, semantic_status=semantic)
 
-
-def compute_visual_features(frames: Iterable[Mapping[str, Any]], *, planned_samples: int, interval: tuple[float, float], preprocess: Mapping[str, Any], low_change_threshold: float) -> VisualFeatures:
-    """Calculate bounded frame facts, rejecting decoded PTS outside the unit interval."""
-    accepted: list[dict[str, Any]] = []
-    failures: list[dict[str, Any]] = []
-    provider = frames
-    for ordinal, item in enumerate(provider):
-        get = (lambda key, default=None: item.get(key, default)) if isinstance(item, Mapping) else (lambda key, default=None: getattr(item, key, default))
-        mapped = float(get("mapped_timestamp"))
-        if not interval[0] <= mapped < interval[1]:
-            failures.append({"ordinal": ordinal, "reason": "pts_outside_interval", "mapped_timestamp": mapped})
-            continue
-        pixels = np.asarray(get("frame"))
-        gray = pixels.astype(float).mean(axis=2) if pixels.ndim == 3 else pixels.astype(float)
-        roi = preprocess.get("roi", "full")
-        if roi != "full":
-            y0, y1, x0, x1 = roi
-            gray = gray[y0:y1, x0:x1]
-        laplacian = -4 * gray
-        laplacian[1:, :] += gray[:-1, :]; laplacian[:-1, :] += gray[1:, :]
-        laplacian[:, 1:] += gray[:, :-1]; laplacian[:, :-1] += gray[:, 1:]
-        accepted.append({"ordinal": int(get("decoded_frame_ordinal", ordinal)), "target_time": float(get("target_time")), "mapped_timestamp": mapped, "pts": int(get("pts")), "time_base": str(get("time_base")), "mapping_status": get("mapping_status"), "camera": get("camera", getattr(getattr(provider, "ref", None), "feature_key", None)), "sampling_error": get("sampling_error"), "blur_laplacian_variance": float(np.var(laplacian[1:-1, 1:-1])) if min(gray.shape) > 2 else 0.0, "mean_luminance": float(gray.mean()), "pixels": gray})
-    spans: list[dict[str, int]] = []
-    start = None
-    for index in range(1, len(accepted)):
-        # Caller supplies decoded pixels; compare consecutive accepted frames by ordinal.
-        pixel_change = float(np.mean(np.abs(accepted[index]["pixels"] - accepted[index - 1]["pixels"])))
-        if pixel_change <= low_change_threshold:
-            start = index - 1 if start is None else start
-        elif start is not None:
-            spans.append({"start_ordinal": start, "end_ordinal": index - 1, "length": index - start})
-            start = None
-    if start is not None:
-        spans.append({"start_ordinal": start, "end_ordinal": len(accepted) - 1, "length": len(accepted) - start})
-    for item in accepted:
-        item.pop("pixels")
-    for error in getattr(provider, "errors", ()):
-        failures.append({"target_time": error.target_time, "reason": error.reason, "detail": error.detail})
-    decoded_coverage = getattr(provider, "coverage", {})
-    coverage = {"planned_samples": int(planned_samples), "attempted_samples": int(decoded_coverage.get("attempted", len(accepted) + len(failures))), "computed_samples": len(accepted), "failed_samples": len(failures)}
-    return VisualFeatures(tuple(accepted), tuple(failures), coverage, tuple(spans), dict(preprocess))
