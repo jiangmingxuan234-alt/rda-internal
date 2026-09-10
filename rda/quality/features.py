@@ -12,6 +12,7 @@ import numpy as np
 
 from rda.io.schema import EpisodeData
 from rda.quality.config import QualityConfig
+from rda.quality.semantic_binding import validate_semantic_binding
 from rda.quality.visual_features import VisualFeatures, compute_visual_features
 
 
@@ -68,14 +69,8 @@ def _arrays(episode: EpisodeData, config: QualityConfig) -> tuple[np.ndarray | N
 def compute_shared_features(episode: EpisodeData, config: QualityConfig, *, producer_binding: Mapping[str, Any] | None = None) -> SharedFeatures:
     """Compute explicit action/state observations without a legacy metric call."""
     action, state = _arrays(episode, config)
-    semantic = "UNKNOWN"
-    if config.robot is not None and "source_binding" in config.robot and producer_binding is not None and (
-        producer_binding.get("profile_id") == config.robot["profile_id"]
-        and producer_binding.get("revision") == config.robot["source_binding"]["profile_revision"]
-        and producer_binding.get("raw_sha256") == config.robot["source_binding"]["profile_content_hash"]
-        and producer_binding.get("status") == "complete"
-    ):
-        semantic = "BOUND"
+    binding = validate_semantic_binding(config.robot, producer_binding) if config.robot is not None else None
+    semantic = "BOUND" if binding is not None else "UNKNOWN"
     numeric: dict[str, Any] = {"timestamps": {"sample_count": int(len(episode.timestamps)), "minimum_samples": 2}}
     try:
         timestamps = np.asarray(episode.timestamps, dtype=float)
@@ -122,17 +117,22 @@ def compute_shared_features(episode: EpisodeData, config: QualityConfig, *, prod
             numeric[kind] = {"status": "invalid_shape", "dimensions": {}}
             continue
         dimensions: dict[str, Any] = {}
+        source_dimensions = binding["sources"][kind]["dimensions"] if binding is not None else {}
         for index in range(arr.shape[1]):
             values = np.asarray(arr[:, index], dtype=float)
-            entry: dict[str, Any] = {"statistics": _stat(values), "kind": "discrete" if index in discrete else "continuous"}
-            if index in discrete:
+            semantics = source_dimensions.get(str(index), {})
+            dimension_period = semantics.get("period", periodic.get(index))
+            dimension_discrete = bool(semantics.get("discrete", index in discrete))
+            dimension_representation = semantics.get("representation", representation)
+            entry: dict[str, Any] = {"statistics": _stat(values), "kind": "discrete" if dimension_discrete else "continuous"}
+            if dimension_discrete:
                 transitions = np.flatnonzero(np.diff(values) != 0)
                 entry["transitions"] = [int(v) for v in transitions]
                 entry["value_counts"] = {str(value): int(count) for value, count in zip(*np.unique(values, return_counts=True))}
             else:
-                entry["delta"] = _delta(values, period=periodic.get(index))
+                entry["delta"] = _delta(values, period=dimension_period)
                 if kind == "action":
-                    if semantic == "BOUND" and representation in {"velocity", "delta_position"}:
+                    if semantic == "BOUND" and dimension_representation in {"velocity", "delta_position"}:
                         mask = np.abs(values) > 0
                         entry["activity_count"] = int(np.count_nonzero(mask))
                         entry["activity_runs"] = _runs(mask)
@@ -142,13 +142,12 @@ def compute_shared_features(episode: EpisodeData, config: QualityConfig, *, prod
                 if kind == "state":
                     if semantic == "BOUND" and valid_time:
                         state_delta = np.diff(values)
-                        if index in periodic:
-                            state_delta = (state_delta + periodic[index] / 2.0) % periodic[index] - periodic[index] / 2.0
+                        if dimension_period is not None:
+                            state_delta = (state_delta + dimension_period / 2.0) % dimension_period - dimension_period / 2.0
                         derivative = state_delta / np.diff(timestamps)
-                        group = next((group for group in config.robot["dimension_groups"].values() if index in group["indices"]), None)
-                        unit = (str(group["unit"]) if group else "unknown") + "/s"
+                        unit = str(semantics.get("unit", "unknown")) + "/s"
                         acceleration = np.diff(derivative) / np.diff(timestamps)[1:] if len(derivative) >= 2 else np.array([])
-                        entry["derivative"] = _stat(derivative) | {"values": [float(value) for value in derivative], "locations": [int(value) for value in range(len(derivative))], "unit": unit, "difference": "wrapped_first_difference" if index in periodic else "first_difference", "smoothing": "none", "status": "ok", "acceleration": _stat(acceleration) | {"values": [float(value) for value in acceleration], "locations": [int(value + 1) for value in range(len(acceleration))], "unit": unit + "/s"}}
+                        entry["derivative"] = _stat(derivative) | {"values": [float(value) for value in derivative], "locations": [int(value) for value in range(len(derivative))], "unit": unit, "difference": "wrapped_first_difference" if dimension_period is not None else "first_difference", "smoothing": "none", "status": "ok", "acceleration": _stat(acceleration) | {"values": [float(value) for value in acceleration], "locations": [int(value + 1) for value in range(len(acceleration))], "unit": unit + "/s"}}
                     else:
                         entry["derivative"] = {"status": "UNASSESSED" if semantic == "UNKNOWN" else "invalid_timestamps"}
             dimensions[str(index)] = entry

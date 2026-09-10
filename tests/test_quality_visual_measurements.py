@@ -36,7 +36,8 @@ def test_visual_features_report_actual_coverage_pts_and_low_change_spans():
     result = compute_visual_features(frames, planned_samples=10, interval=(0.0, 1.0), preprocess={"roi": "full", "grayscale": True}, low_change_threshold=1.0)
     assert result.coverage == {"planned_samples": 10, "attempted_samples": 3, "decoded_samples": 3, "computed_samples": 2, "failed_samples": 1}
     assert result.frames[0]["pts"] == 10
-    assert result.low_change_spans == ({"start_ordinal": 0, "end_ordinal": 1, "length": 2},)
+    assert result.low_change_spans[0]["start_ordinal"] == 0
+    assert result.low_change_spans[0]["end_pts"] == 11
     assert result.failures[0]["reason"] == "pts_outside_interval"
 
 
@@ -69,10 +70,7 @@ def test_low_change_spans_do_not_cross_rejected_pts_or_missing_ordinals():
         low_change_threshold=1.0,
     )
 
-    assert result.low_change_spans == (
-        {"start_ordinal": 0, "end_ordinal": 1, "length": 2},
-        {"start_ordinal": 3, "end_ordinal": 4, "length": 2},
-    )
+    assert [(span["start_ordinal"], span["end_ordinal"]) for span in result.low_change_spans] == [(0, 1), (3, 4)]
 
 
 def test_visual_features_use_interior_laplacian_and_publish_exposure_clipping():

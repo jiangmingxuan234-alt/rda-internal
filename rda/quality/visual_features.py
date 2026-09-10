@@ -36,7 +36,10 @@ def _roi(gray: np.ndarray, value: Any) -> tuple[np.ndarray | None, str | None]:
 
 
 def _gray(frame: Any) -> np.ndarray:
-    pixels = np.asarray(frame)
+    if hasattr(frame, "to_ndarray"):
+        pixels = frame.to_ndarray(format="gray")
+    else:
+        pixels = np.asarray(frame)
     if pixels.ndim == 3:
         if pixels.shape[2] not in (1, 3, 4):
             raise ValueError("decoded frame must have one, three, or four channels")
@@ -79,7 +82,7 @@ def compute_visual_features(
     def close_run() -> None:
         nonlocal run
         if len(run) >= 2:
-            spans.append({"start_ordinal": run[0]["ordinal"], "end_ordinal": run[-1]["ordinal"], "length": len(run)})
+            spans.append({"start_ordinal": run[0]["ordinal"], "end_ordinal": run[-1]["ordinal"], "length": len(run), "start_pts": run[0]["pts"], "end_pts": run[-1]["pts"], "start_time": run[0]["mapped_timestamp"], "end_time": run[-1]["mapped_timestamp"], "pixel_change_values": [item["pixel_change"] for item in run[1:]]})
         run = []
 
     for source_ordinal, decoded_frame in enumerate(frames):
@@ -106,10 +109,12 @@ def compute_visual_features(
                 "blur_laplacian_variance": _laplacian_variance(crop), "mean_luminance": float(crop.mean()),
                 "contrast_p5_p95": float(np.percentile(crop, 95) - np.percentile(crop, 5)),
                 "clipped_dark_fraction": float(np.mean(crop <= 0.0)),
-                "clipped_bright_fraction": float(np.mean(crop >= 255.0)), "_pixels": crop}
+                "clipped_bright_fraction": float(np.mean(crop >= 255.0)), "exposure_percentiles": {"p5": float(np.percentile(crop, 5)), "p95": float(np.percentile(crop, 95))}, "_pixels": crop}
         accepted.append(item)
         contiguous = previous is not None and item["ordinal"] == previous["ordinal"] + 1
-        low_change = contiguous and float(np.mean(np.abs(item["_pixels"] - previous["_pixels"]))) <= low_change_threshold
+        pixel_change = float(np.mean(np.abs(item["_pixels"] - previous["_pixels"]))) if contiguous else None
+        item["pixel_change"] = pixel_change
+        low_change = contiguous and pixel_change <= low_change_threshold
         if not low_change:
             close_run(); run = [item]
         else:
