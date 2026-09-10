@@ -63,6 +63,17 @@ def measure_unit(unit: PlanUnit, episode: EpisodeData, media: Any, config: Quali
         dimensions = values["numeric"].get(source, {}).get("dimensions")
         if isinstance(dimensions, dict):
             values["numeric"][source]["dimensions"] = {index: fact for index, fact in dimensions.items() if index in indices}
+    if unit.metric == "sampling_jitter":
+        values = {"timestamps": values["numeric"]["timestamps"]}
+    elif unit.metric == "idle_ratio":
+        dimensions = values["numeric"].get("action", {}).get("dimensions", {})
+        active = sum(int(item.get("activity_count", 0)) for item in dimensions.values())
+        total = episode.num_frames * max(1, len(dimensions))
+        values = {"activity": {"active_samples": active, "total_samples": total, "idle_ratio": float((total - active) / total), "runs": [item.get("activity_runs", []) for item in dimensions.values()]}}
+    elif unit.metric == "velocity_acceleration":
+        values = {"state_derivatives": {index: item.get("derivative", {"status": "UNASSESSED"}) for index, item in values["numeric"].get("state", {}).get("dimensions", {}).items()}}
+    elif unit.metric == "action_discontinuity":
+        values = {"action_deltas": {index: item.get("delta", {}) for index, item in values["numeric"].get("action", {}).get("dimensions", {}).items()}}
     timestamp_error = features.numeric["timestamps"].get("status") != "ok"
     coverage = {"planned_samples": episode.num_frames, "attempted_samples": episode.num_frames,
                 "computed_samples": 0 if timestamp_error else episode.num_frames}
