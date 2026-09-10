@@ -5,6 +5,7 @@ Provides the `rda` command with subcommands for auditing robot datasets.
 from __future__ import annotations
 
 import sys
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -105,6 +106,21 @@ def cli(ctx: click.Context) -> None:
         "No raw trajectory data is included — only aggregated metrics."
     ),
 )
+@click.option(
+    "--metrics",
+    type=str,
+    default=None,
+    help=(
+        "Comma-separated metric allowlist. When omitted, all registered "
+        "metrics run (the default historical behaviour)."
+    ),
+)
+@click.option(
+    "--offline",
+    is_flag=True,
+    default=False,
+    help="Run in offline mode and disable network-backed integrations.",
+)
 def audit(
     path: Path,
     output: Optional[Path],
@@ -113,6 +129,8 @@ def audit(
     launch_ui: bool,
     verbose: bool,
     blind: bool,
+    metrics: Optional[str],
+    offline: bool,
 ) -> None:
     """Audit a LeRobot dataset at the given PATH.
 
@@ -127,10 +145,26 @@ def audit(
       rda audit ./my_dataset --blind  # anonymized report for external sharing
     """
     from rda.audit.dataset_audit import DatasetAuditor
+    from rda.audit.episode_audit import EpisodeAuditor, resolve_metrics
     from rda.report.json_report import save_json_report
     from rda.report.summary import build_summary, format_enhanced_summary_text
 
     path_str = str(path)
+
+    # Resolve the allowlist before touching the dataset. This makes unknown
+    # names deterministic CLI errors and avoids an expensive partial audit.
+    try:
+        selected_metrics = resolve_metrics(metrics)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+
+    if offline:
+        # Keep the flag useful to metric/configuration code that consults the
+        # conventional offline environment variables. Audit itself is local,
+        # but this also protects optional integrations imported by metrics.
+        os.environ["RDA_OFFLINE"] = "1"
+        os.environ["HF_HUB_OFFLINE"] = "1"
+        os.environ["TRANSFORMERS_OFFLINE"] = "1"
 
     # --- Validate input path ------------------------------------------------
     if not path.exists():
@@ -198,7 +232,9 @@ def audit(
         click.echo("")
 
     # --- Run the audit ------------------------------------------------------
-    auditor = DatasetAuditor()
+    auditor = DatasetAuditor(
+        episode_auditor=EpisodeAuditor(metrics=selected_metrics)
+    )
     try:
         episode_iter = iter_episodes(path_str)
         result = auditor.audit_dataset(dataset_info, episode_iter)

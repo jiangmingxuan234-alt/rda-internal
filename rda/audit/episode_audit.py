@@ -37,6 +37,31 @@ _PORTABLE_TO_METRIC: Dict[str, str] = {
 }
 
 
+def resolve_metrics(names: str | Sequence[str] | None) -> List[MetricBase]:
+    """Resolve an optional metric allowlist against the registry.
+
+    ``None`` preserves the historical behaviour of running every registered
+    metric.  A string is interpreted as a comma-separated list, while a
+    sequence is accepted for programmatic callers.  Unknown names are
+    rejected before any dataset is loaded so a typo can never silently produce
+    a partial audit.
+    """
+    from rda.metrics import ALL_METRICS
+
+    registry = {cls.name: cls for cls in ALL_METRICS}
+    if names is None:
+        selected = list(registry)
+    elif isinstance(names, str):
+        selected = [part.strip() for part in names.split(",") if part.strip()]
+    else:
+        selected = [str(part).strip() for part in names if str(part).strip()]
+
+    unknown = [name for name in selected if name not in registry]
+    if unknown:
+        raise ValueError(f"unknown metric name(s): {', '.join(unknown)}")
+    return [registry[name]() for name in selected]
+
+
 @dataclass
 class EpisodeAuditResult:
     """Result of auditing a single episode.
@@ -105,9 +130,7 @@ class EpisodeAuditor:
                 hard import dependency on the calibration module.
         """
         if metrics is None:
-            from rda.metrics import ALL_METRICS
-
-            metrics = [cls() for cls in ALL_METRICS]
+            metrics = resolve_metrics(None)
         self.metrics: List[MetricBase] = list(metrics)
         self.scorer = scorer
 
