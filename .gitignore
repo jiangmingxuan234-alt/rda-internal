@@ -30,3 +30,4 @@ rda_report.json
 Thumbs.db
 benchmarks/results/
 benchmarks/results/
+.worktrees/
