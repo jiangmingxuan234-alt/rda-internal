@@ -92,7 +92,7 @@ flowchart TD
     V --> A[Adapter：门禁与输入契约]
     D --> L[RDA：按 episode/相机读取]
     A --> L
-    C[机器人、质量与训练配置] --> P[RDA：执行计划与适用性判断]
+    CFG[机器人、质量与训练配置] --> P[RDA：执行计划与适用性判断]
     L --> P
     P --> M[共享特征与质量指标]
     M --> R[质量规则与数据集统计]
@@ -184,7 +184,7 @@ rda capabilities --format json
 
 消费输入清单，按 episode 实际所属的全部数据行段读取；若目标 v3 交付契约不支持某布局，明确返回 unsupported_layout，不能只读第一份文件。保留原始 timestamp，不合成时间轴掩盖缺失。
 
-所有计划项必须最终落在 computed、not_audited、error 三类之一。一个 episode 读取失败可以让其他 episode 继续产出诊断，但整次运行标记 PARTIAL，不能发布“完整通过”。
+所有计划项必须最终落在四层状态定义的终态组合之一，并带 reason_code。一个 episode 读取失败可以让其他 episode 继续产出诊断，但整次运行标记 PARTIAL 或 ERROR，不能发布“完整通过”。
 
 视频按半开区间 `[from_timestamp, to_timestamp)` 取帧。关键帧 seek 只决定解码起点；真正样本必须按 PTS 再筛选，返回实际 PTS，并验证属于当前 episode。记录目标时间与实际时间误差，不能把上一段视频边界帧算进当前段。
 
