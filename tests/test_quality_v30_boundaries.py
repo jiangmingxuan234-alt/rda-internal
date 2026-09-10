@@ -183,6 +183,21 @@ def test_quality_reader_does_not_synthesize_missing_timestamp(tmp_path):
         raise AssertionError("missing timestamp must fail closed")
 
 
+def test_quality_reader_rejects_nonfinite_or_out_of_interval_timestamps(tmp_path):
+    root = tmp_path / "dataset"
+    source = root / "data" / "rows.parquet"
+    source.parent.mkdir(parents=True)
+    pq.write_table(pa.table({"episode_index": [7], "timestamp": [float("nan")], "frame_index": [0], "index": [10], "task_index": [3]}), source)
+    segment = {"episode_id": 7, "order": 0, "relative_path": "data/rows.parquet", "source_sha256": _sha256(source), "row_group": 0, "row_coordinate_basis": "row_group", "row_start": 0, "row_end": 1, "row_count": 1, "index_bounds": {"global_from": 10, "global_to": 11, "frame_from": 0, "frame_to": 1}, "task_indexes": [3], "status": "complete"}
+    manifest = load_quality_manifest(_write_manifest(root, [segment]))
+    try:
+        list(iter_quality_episode_batches(manifest, 7, columns=["timestamp"]))
+    except Exception as exc:
+        assert getattr(exc, "code", None) == "segment_identity_mismatch"
+    else:
+        raise AssertionError("nonfinite timestamp must fail closed")
+
+
 def test_quality_reader_streams_a_row_group_in_bounded_batches(tmp_path):
     """Removing batch iteration would collapse this five-row segment into one batch."""
     root = tmp_path / "dataset"
@@ -192,7 +207,7 @@ def test_quality_reader_streams_a_row_group_in_bounded_batches(tmp_path):
         pa.table(
             {
                 "episode_index": [7] * 5,
-                "timestamp": [1.0, 1.1, 1.2, 1.3, 1.4],
+                "timestamp": [1.0, 1.1, 1.2, 1.3, 1.39],
                 "frame_index": [0, 1, 2, 3, 4],
                 "index": [10, 11, 12, 13, 14],
                 "task_index": [3, 3, 3, 3, 3],

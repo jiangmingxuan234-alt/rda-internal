@@ -263,3 +263,33 @@ def test_physical_row_cannot_be_claimed_by_two_episodes(tmp_path):
     with pytest.raises(QualityInputError) as caught:
         load_quality_manifest(_write(root, raw))
     assert caught.value.code == "overlapping_segments"
+
+
+@pytest.mark.parametrize("scale", [0.0, -1.0])
+def test_manifest_rejects_nonpositive_media_clock_scale(tmp_path, scale):
+    """Accepting this value reaches division by zero during decode."""
+    root = tmp_path / "dataset"
+    raw, parquet = _base_manifest(root)
+    video = root / "videos" / "shared.mp4"
+    video.parent.mkdir()
+    video.write_bytes(b"placeholder")
+    video_source = {"relative_path": "videos/shared.mp4", "byte_size": video.stat().st_size, "sha256": _sha(video), "status": "complete"}
+    raw["snapshot_identity"]["sources"].append(video_source)
+    raw["snapshot_identity"]["digest"] = _snapshot_digest(raw["snapshot_identity"]["sources"])
+    raw["episodes"][0]["media"] = [{
+        "episode_id": 4,
+        "feature_key": "observation.images.front",
+        "relative_path": "videos/shared.mp4",
+        "source_sha256": _sha(video),
+        "stream_index": 0,
+        "from_timestamp": 2.0,
+        "to_timestamp": 2.2,
+        "clock_domain": "lerobot_timestamp_seconds",
+        "clock_mapping": {"kind": "affine", "version": 1, "scale": scale, "offset": 0.0},
+        "stream": {"start_time": 0, "time_base_numerator": 1, "time_base_denominator": 10},
+        "status": "complete",
+    }]
+
+    with pytest.raises(QualityInputError) as caught:
+        load_quality_manifest(_write(root, raw))
+    assert caught.value.code == "invalid_manifest"

@@ -30,6 +30,7 @@ field) or from the presence of ``meta/episodes.jsonl``.
 from __future__ import annotations
 
 import json
+import math
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional
@@ -281,6 +282,7 @@ def iter_quality_episode_batches(
         raise ValueError("batch_size must be a positive integer")
     required_identity = ["episode_index", "timestamp", "frame_index", "index", "task_index"]
     projected = list(dict.fromkeys([*columns, *required_identity]))
+    episode = manifest.episodes[episode_id]
     for segment in iter_episode_segments(manifest, episode_id):
         source = manifest.sources[segment.relative_path]
         verify_source(source)
@@ -322,6 +324,16 @@ def iter_quality_episode_batches(
                 expected_frames = list(range(segment.frame_from + selected_rows, segment.frame_from + selected_rows + selected.num_rows))
                 if values["index"] != expected_globals or values["frame_index"] != expected_frames:
                     raise QualityInputError("segment_identity_mismatch", "physical row index bounds differ from the manifest", location=segment.relative_path)
+                timestamps = values["timestamp"]
+                if any(
+                    isinstance(value, bool)
+                    or not isinstance(value, (int, float))
+                    or not math.isfinite(value)
+                    or value < episode.timestamp_from
+                    or value >= episode.timestamp_to
+                    for value in timestamps
+                ):
+                    raise QualityInputError("segment_identity_mismatch", "physical timestamps must be finite and within the declared episode interval", location=segment.relative_path)
                 observed_tasks.update(values["task_index"])
                 selected_rows += selected.num_rows
                 yield selected.select(columns)

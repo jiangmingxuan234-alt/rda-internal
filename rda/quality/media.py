@@ -95,6 +95,11 @@ class MediaDecodeResult(Iterator[DecodedFrame]):
             import av
 
             with av.open(str(self.ref.source_path)) as container:
+                format_name = getattr(getattr(container, "format", None), "name", "")
+                if self.ref.source_path.suffix.lower() != ".mp4" or "mp4" not in format_name.lower():
+                    for target in valid_targets:
+                        self._record_error(target, "unsupported_container", "quality media requires an MP4 container")
+                    return
                 streams = list(container.streams.video)
                 stream = next((value for value in streams if value.index == self.ref.stream_index), None)
                 if stream is None:
@@ -140,6 +145,8 @@ class MediaDecodeResult(Iterator[DecodedFrame]):
                         self.coverage["computed"] += 1
                         yield DecodedFrame(target, pts, time_base, ordinal, None, mapped, mapped - target, "mapped", decoded)
                     previous = current
+                    if not pending:
+                        break
         except Exception as exc:
             for target in pending:
                 self._record_error(target, "decode_failed", str(exc))

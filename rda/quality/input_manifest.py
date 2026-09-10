@@ -220,6 +220,19 @@ def verify_source(source: SourceFile) -> None:
         raise _error("source_changed", f"protected source identity changed: {source.relative_path}", source.relative_path)
 
 
+def _validate_segment_intervals(segments: list[EpisodeSegment], location: str) -> None:
+    """Reject physical row overlap using segment-sized, not row-sized, state."""
+    by_source: dict[tuple[str, int], list[tuple[int, int]]] = {}
+    for segment in segments:
+        by_source.setdefault((segment.relative_path, segment.row_group), []).append((segment.row_start, segment.row_end))
+    for intervals in by_source.values():
+        previous_end = -1
+        for start, end in sorted(intervals):
+            if start < previous_end:
+                raise _error("overlapping_segments", "row segments overlap or duplicate a physical row", location)
+            previous_end = end
+
+
 def load_quality_manifest(path: Path) -> QualityInputManifest:
     """Load and verify a producer-independent version 1 quality manifest."""
     if not isinstance(path, Path):
@@ -354,13 +367,7 @@ def load_quality_manifest(path: Path) -> QualityInputManifest:
             segments.append(EpisodeSegment(episode_id, order, source.path, relative, source_hash, row_group, row_start, row_end, row_count, global_from, global_to, frame_from, frame_to, segment_tasks, status))
         if sum(segment.row_count for segment in segments) != length or previous_global != dataset_to:
             raise _error("missing_segments", "row segments do not completely cover the declared episode", f"{location}.row_segments")
-        occupied: set[tuple[str, int, int]] = set()
-        for segment in segments:
-            for row in range(segment.row_start, segment.row_end):
-                coordinate = (segment.relative_path, segment.row_group, row)
-                if coordinate in occupied:
-                    raise _error("overlapping_segments", "row segments overlap or duplicate a physical row", f"{location}.row_segments")
-                occupied.add(coordinate)
+        _validate_segment_intervals(segments, f"{location}.row_segments")
 
         media_refs: list[MediaRef] = []
         for media_no, media_value in enumerate(_list(_required(item, "media", location), f"{location}.media")):
@@ -387,6 +394,8 @@ def load_quality_manifest(path: Path) -> QualityInputManifest:
             if _required(mapping, "kind", f"{media_location}.clock_mapping") != "affine":
                 raise _error("unsupported_clock_mapping", "media clock mapping kind must be affine", media_location)
             scale = _number(_required(mapping, "scale", f"{media_location}.clock_mapping"), f"{media_location}.clock_mapping.scale")
+            if scale <= 0:
+                raise _error("invalid_manifest", "media clock_mapping.scale must be positive", f"{media_location}.clock_mapping.scale")
             offset = _number(_required(mapping, "offset", f"{media_location}.clock_mapping"), f"{media_location}.clock_mapping.offset")
             stream = _mapping(_required(media, "stream", media_location), f"{media_location}.stream")
             numerator = _integer(_required(stream, "time_base_numerator", f"{media_location}.stream"), f"{media_location}.stream.time_base_numerator", minimum=1)
@@ -404,14 +413,10 @@ def load_quality_manifest(path: Path) -> QualityInputManifest:
         episodes[episode_id] = EpisodeManifest(episode_id, raw_id, length, dataset_from, dataset_to, timestamp_from, timestamp_to, tasks, tuple(segments), tuple(media_refs))
     if tuple(episodes) != expected_ids:
         raise _error("episode_scope_mismatch", "episodes must exactly match scope.episode_ids in order", "episodes")
-    occupied_rows: set[tuple[str, int, int]] = set()
-    for episode in episodes.values():
-        for segment in episode.row_segments:
-            for row in range(segment.row_start, segment.row_end):
-                coordinate = (segment.relative_path, segment.row_group, row)
-                if coordinate in occupied_rows:
-                    raise _error("overlapping_segments", "a physical Parquet row is claimed by multiple episodes", "episodes.row_segments")
-                occupied_rows.add(coordinate)
+    _validate_segment_intervals(
+        [segment for episode in episodes.values() for segment in episode.row_segments],
+        "episodes.row_segments",
+    )
     media_refs = [ref for episode in episodes.values() for ref in episode.media]
     for index, left in enumerate(media_refs):
         for right in media_refs[index + 1 :]:

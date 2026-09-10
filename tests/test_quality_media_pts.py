@@ -33,6 +33,25 @@ def _write_video(path: Path, *, frames: int = 8, fps: int = 10) -> None:
             container.mux(packet)
 
 
+def test_decode_rejects_a_renamed_matroska_container(tmp_path):
+    video = tmp_path / "videos" / "renamed.mp4"
+    video.parent.mkdir(parents=True)
+    with av.open(str(video), mode="w", format="matroska") as container:
+        stream = container.add_stream("libx264", rate=10)
+        stream.width = stream.height = 32
+        stream.pix_fmt = "yuv420p"
+        frame = av.VideoFrame.from_ndarray(np.zeros((32, 32, 3), dtype=np.uint8), format="rgb24")
+        frame.pts = 0
+        frame.time_base = Fraction(1, 10)
+        for packet in stream.encode(frame):
+            container.mux(packet)
+        for packet in stream.encode():
+            container.mux(packet)
+    result = decode_media_interval(_ref(video, start=5.0, end=5.1), [5.0], mode="nearest")
+    assert list(result) == []
+    assert result.errors[0].reason == "unsupported_container"
+
+
 def _ref(path: Path, *, start: float = 5.2, end: float = 5.6) -> MediaRef:
     return MediaRef(
         episode_id=7,
@@ -141,6 +160,7 @@ def test_decode_stream_failure_preserves_samples_completed_before_failure(tmp_pa
 
     class Container:
         streams = types.SimpleNamespace(video=[Stream()])
+        format = types.SimpleNamespace(name="mov,mp4,m4a,3gp,3g2,mj2")
 
         def __enter__(self):
             return self

@@ -114,3 +114,33 @@ tests; these 20 focused Task 2 tests were present at final verification.
   already yielded.  Completed frames remain observable and unfinished targets
   receive structured errors, so coverage reflects actual work rather than a
   fabricated all-or-nothing result.
+
+## Review fix round 1
+
+The review fixes reject nonpositive affine scales at manifest load, require an
+MP4 path and actual MP4 container, validate raw timestamps as finite and
+within their declared half-open episode interval, and replace row-by-row
+overlap sets with sorted half-open segment intervals.  Decode stops after the
+successor needed for the final target and still performs its terminal source
+hash guard.  The schema now calls decoded ordinal seek-local and identifies
+source hash, stream index, and PTS as the cross-request identity.
+
+Observed RED checks in this round included:
+
+```
+... pytest tests/test_quality_input_manifest.py::test_manifest_rejects_nonpositive_media_clock_scale -q
+2 failed: DID NOT RAISE QualityInputError
+
+... pytest tests/test_quality_media_pts.py::test_decode_rejects_a_renamed_matroska_container -q
+1 failed: expected unsupported_container, received stream_identity_mismatch
+```
+
+Final verification after the round:
+
+```
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=. /tmp/rda-quality-venv/bin/python -m pytest tests/test_quality_input_manifest.py tests/test_quality_v30_boundaries.py tests/test_quality_media_pts.py -q
+24 passed in 0.25s
+
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=. /tmp/rda-quality-venv/bin/python -m pytest -q
+230 passed, 6 skipped in 0.69s
+```

@@ -113,3 +113,6 @@ intervals are finite, nonempty, half-open, and share `timestamp_clock.domain`
 with row timestamps.  The mapping is `mapped_timestamp = (PTS * time_base) *
 scale + offset`; `stream.start_time` is recorded and never implicitly
 subtracted.  Decoded stream ordinal is separate from a LeRobot frame index.
+Because bounded decoding seeks before decoding, the reported ordinal is local
+to that seek/decode pass; cross-request frame identity is the protected source
+hash together with stream index and PTS.
