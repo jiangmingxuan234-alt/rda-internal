@@ -45,15 +45,30 @@ def measure_unit(unit: PlanUnit, episode: EpisodeData, media: Any, config: Quali
                                  visual.coverage, {"frames": visual.frames, "low_change_spans": visual.low_change_spans, "preprocess": visual.preprocess}, visual.failures)
     features = compute_shared_features(episode, config, producer_binding=unit.input_references.get("robot_profile"))
     needed = {"action_discontinuity", "idle_ratio"}
-    source_failures = [kind for kind in (("action",) if unit.metric in needed else ("state",)) if features.numeric.get(kind, {}).get("status") in {"missing_source", "invalid_shape"}]
+    source_failures = [kind for kind in (("action",) if unit.metric in needed else ("state",)) if features.numeric.get(kind, {}).get("status") in {"missing_source", "invalid_shape", "nonnumeric_source"}]
     if source_failures:
         return MeasurementRecord(unit.plan_unit_id, unit.metric, ALGORITHM_VERSION,
                                  config.effective_config_hash, Applicability.UNKNOWN,
                                  {"planned_samples": episode.num_frames, "attempted_samples": 0, "computed_samples": 0}, {},
                                  tuple({"reason": "source_unavailable", "source": kind} for kind in source_failures))
     values = {"numeric": features.numeric, "semantic_status": features.semantic_status}
+    if config.robot is None:
+        coverage = {"planned_samples": episode.num_frames, "attempted_samples": episode.num_frames, "computed_samples": 0}
+        return MeasurementRecord(unit.plan_unit_id, unit.metric, ALGORITHM_VERSION, config.effective_config_hash,
+                                 Applicability.UNKNOWN, coverage, values, ({"reason": "semantic_profile_missing"},))
+    if unit.camera_or_dimension_group not in config.robot["dimension_groups"]:
+        raise ValueError("plan unit dimension group is not configured")
+    indices = {str(index) for index in config.robot["dimension_groups"][unit.camera_or_dimension_group]["indices"]}
+    for source in ("action", "state"):
+        dimensions = values["numeric"].get(source, {}).get("dimensions")
+        if isinstance(dimensions, dict):
+            values["numeric"][source]["dimensions"] = {index: fact for index, fact in dimensions.items() if index in indices}
+    timestamp_error = features.numeric["timestamps"].get("status") != "ok"
     coverage = {"planned_samples": episode.num_frames, "attempted_samples": episode.num_frames,
-                "computed_samples": episode.num_frames}
+                "computed_samples": 0 if timestamp_error else episode.num_frames}
+    if timestamp_error:
+        return MeasurementRecord(unit.plan_unit_id, unit.metric, ALGORITHM_VERSION, config.effective_config_hash,
+                                 Applicability.UNKNOWN, coverage, values, ({"reason": "invalid_timestamps"},))
     return MeasurementRecord(unit.plan_unit_id, unit.metric, ALGORITHM_VERSION,
                              config.effective_config_hash, Applicability.APPLICABLE,
                              coverage, values, ())

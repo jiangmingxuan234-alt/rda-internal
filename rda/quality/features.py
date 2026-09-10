@@ -28,7 +28,7 @@ class SharedFeatures:
 def _stat(values: np.ndarray) -> dict[str, Any]:
     finite = np.asarray(values, dtype=float)
     finite = finite[np.isfinite(finite)]
-    result: dict[str, Any] = {"sample_count": int(values.size), "finite_count": int(finite.size)}
+    result: dict[str, Any] = {"sample_count": int(values.size), "finite_count": int(finite.size), "missing_count": int(values.size - finite.size), "minimum_samples": 1}
     if not finite.size:
         return result | {"status": "empty"}
     result.update({"median": float(np.median(finite)), "p95": float(np.percentile(finite, 95))})
@@ -76,10 +76,16 @@ def compute_shared_features(episode: EpisodeData, config: QualityConfig, *, prod
         and producer_binding.get("status") == "complete"
     ):
         semantic = "BOUND"
-    numeric: dict[str, Any] = {"timestamps": {"sample_count": int(len(episode.timestamps))}}
-    timestamps = np.asarray(episode.timestamps, dtype=float)
+    numeric: dict[str, Any] = {"timestamps": {"sample_count": int(len(episode.timestamps)), "minimum_samples": 2}}
+    try:
+        timestamps = np.asarray(episode.timestamps, dtype=float)
+    except (TypeError, ValueError):
+        timestamps = np.array([], dtype=float)
     valid_time = timestamps.ndim == 1 and len(timestamps) == episode.num_frames and np.all(np.isfinite(timestamps)) and (len(timestamps) < 2 or np.all(np.diff(timestamps) > 0))
     numeric["timestamps"]["status"] = "ok" if valid_time else "invalid_timestamps"
+    if valid_time and len(timestamps) >= 2:
+        dt = np.diff(timestamps)
+        numeric["timestamps"].update({"duration": float(timestamps[-1] - timestamps[0]), "first": float(timestamps[0]), "last": float(timestamps[-1]), "interval": _stat(dt) | {"values": [float(value) for value in dt], "unit": "s"}})
     periodic: dict[int, float] = {}
     discrete: set[int] = set()
     representation = None
@@ -91,15 +97,25 @@ def compute_shared_features(episode: EpisodeData, config: QualityConfig, *, prod
         discrete = set(config.robot.get("discrete_dimensions", ()))
 
     if config.robot is None:
-        numeric["raw_sources"] = {
-            "action": {name: np.asarray(values).tolist() for name, values in episode.action.items()},
-            "state": {name: np.asarray(values).tolist() for name, values in episode.observation.items()},
-        }
+        raw: dict[str, Any] = {"action": {}, "state": {}}
+        for kind, sources in (("action", episode.action), ("state", episode.observation)):
+            for name, source in sources.items():
+                try:
+                    array = np.asarray(source, dtype=float)
+                    if array.ndim == 1: array = array[:, None]
+                    raw[kind][name] = {"dimensions": {str(index): _stat(array[:, index]) for index in range(array.shape[1])}, "shape": list(array.shape)}
+                except (TypeError, ValueError, IndexError):
+                    raw[kind][name] = {"status": "nonnumeric_source"}
+        numeric["raw_sources"] = raw
     for kind, array in (("action", action), ("state", state)):
         if array is None:
             numeric[kind] = {"status": "missing_source", "dimensions": {}}
             continue
-        arr = np.asarray(array)
+        try:
+            arr = np.asarray(array, dtype=float)
+        except (TypeError, ValueError):
+            numeric[kind] = {"status": "nonnumeric_source", "dimensions": {}}
+            continue
         if arr.ndim == 1:
             arr = arr[:, None]
         if arr.ndim != 2 or arr.shape[0] != episode.num_frames:
@@ -108,7 +124,7 @@ def compute_shared_features(episode: EpisodeData, config: QualityConfig, *, prod
         dimensions: dict[str, Any] = {}
         for index in range(arr.shape[1]):
             values = np.asarray(arr[:, index], dtype=float)
-            entry: dict[str, Any] = {"raw_values": [float(v) for v in values], "statistics": _stat(values), "kind": "discrete" if index in discrete else "continuous"}
+            entry: dict[str, Any] = {"statistics": _stat(values), "kind": "discrete" if index in discrete else "continuous"}
             if index in discrete:
                 transitions = np.flatnonzero(np.diff(values) != 0)
                 entry["transitions"] = [int(v) for v in transitions]
@@ -116,8 +132,11 @@ def compute_shared_features(episode: EpisodeData, config: QualityConfig, *, prod
             else:
                 entry["delta"] = _delta(values, period=periodic.get(index))
                 if kind == "action":
-                    if representation in {"velocity", "delta_position"}:
-                        entry["activity_count"] = int(np.count_nonzero(np.abs(values) > 0))
+                    if semantic == "BOUND" and representation in {"velocity", "delta_position"}:
+                        mask = np.abs(values) > 0
+                        entry["activity_count"] = int(np.count_nonzero(mask))
+                        entry["activity_runs"] = _runs(mask)
+                        entry["idle_count"] = int(mask.size - np.count_nonzero(mask))
                     else:
                         entry["activity_count"] = int(np.count_nonzero(np.abs(np.diff(values)) > 0))
                 if kind == "state":
@@ -128,10 +147,22 @@ def compute_shared_features(episode: EpisodeData, config: QualityConfig, *, prod
                         derivative = state_delta / np.diff(timestamps)
                         group = next((group for group in config.robot["dimension_groups"].values() if index in group["indices"]), None)
                         unit = (str(group["unit"]) if group else "unknown") + "/s"
-                        entry["derivative"] = _stat(derivative) | {"values": [float(value) for value in derivative], "locations": [int(value) for value in range(len(derivative))], "unit": unit, "difference": "wrapped_first_difference" if index in periodic else "first_difference", "smoothing": "none", "status": "ok"}
+                        acceleration = np.diff(derivative) / np.diff(timestamps)[1:] if len(derivative) >= 2 else np.array([])
+                        entry["derivative"] = _stat(derivative) | {"values": [float(value) for value in derivative], "locations": [int(value) for value in range(len(derivative))], "unit": unit, "difference": "wrapped_first_difference" if index in periodic else "first_difference", "smoothing": "none", "status": "ok", "acceleration": _stat(acceleration) | {"values": [float(value) for value in acceleration], "locations": [int(value + 1) for value in range(len(acceleration))], "unit": unit + "/s"}}
                     else:
                         entry["derivative"] = {"status": "UNASSESSED" if semantic == "UNKNOWN" else "invalid_timestamps"}
             dimensions[str(index)] = entry
         numeric[kind] = {"status": "ok", "dimensions": dimensions, "representation": representation}
     return SharedFeatures(numeric=numeric, visual={}, semantic_status=semantic)
 
+
+def _runs(mask: np.ndarray) -> list[dict[str, int]]:
+    runs: list[dict[str, int]] = []
+    start: int | None = None
+    for index, active in enumerate(mask):
+        if active and start is None: start = index
+        if start is not None and (not active or index == len(mask) - 1):
+            end = index if active else index - 1
+            runs.append({"start": start, "end": end, "length": end - start + 1})
+            start = None
+    return runs

@@ -40,7 +40,7 @@ def test_constant_nonzero_velocity_command_is_active_without_command_delta():
 def test_missing_profile_preserves_raw_values_but_not_physical_claims():
     episode = EpisodeData(0, 2, np.array([0., 1.]), observation={"state": np.array([[0.], [1.]])}, action={"command": np.array([[1.], [1.]])})
     features = compute_shared_features(episode, _config())
-    assert features.numeric["raw_sources"]["action"]["command"] == [[1.0], [1.0]]
+    assert features.numeric["raw_sources"]["action"]["command"]["dimensions"]["0"]["finite_count"] == 2
     assert features.semantic_status == "UNKNOWN"
     assert features.numeric["state"]["status"] == "missing_source"
 
