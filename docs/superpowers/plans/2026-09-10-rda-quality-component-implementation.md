@@ -43,8 +43,8 @@
 - `UnitResult`：包含 `plan_unit_id`、`applicability`、`execution_state`、`assessment`、`coverage`、`measurement`、`evidence`、`reason_codes`。
 - `QualityRunState`：`COMPLETED / PARTIAL / BLOCKED / ERROR / INTERRUPTED`。
 
-- [ ] **Step 1: 写状态与契约失败测试。** 在 `tests/test_quality_contracts.py` 覆盖四层枚举、非法字符串、`EXCLUDE_CANDIDATE` 不被转换为正式业务排除、缺少 `plan_unit_id`、measurement 与 UNASSESSED 的关系。
-- [ ] **Step 2: 运行契约测试确认失败。**
+- [x] **Step 1: 写状态与契约失败测试。** 在 `tests/test_quality_contracts.py` 覆盖四层枚举、非法字符串、`EXCLUDE_CANDIDATE` 不被转换为正式业务排除、缺少 `plan_unit_id`、measurement 与 UNASSESSED 的关系。
+- [x] **Step 2: 运行契约测试确认失败。**
 
 ```bash
 pytest tests/test_quality_contracts.py -q
@@ -52,12 +52,12 @@ pytest tests/test_quality_contracts.py -q
 
 预期：因 `rda.quality` 契约尚不存在而失败。
 
-- [ ] **Step 3: 实现不可变契约。** 使用 `Enum` 和 `dataclass(frozen=True)`；`UnitResult` 强制 `plan_unit_id`、四层状态、coverage 和 reason code，所有 `PASS/REVIEW/EXCLUDE_CANDIDATE` 必须具有适用且已计算的 measurement 和显式 rule ID/version；SKIPPED/FAILED/CANCELLED 必须 UNASSESSED 且带原因。EXCLUDE_CANDIDATE 还须有适用的校准来源，PASS 须满足覆盖要求；嵌套字段同样不可变。
-- [ ] **Step 4: 写配置失败测试。** 覆盖缺 `contract_version`、未知 metric、quality rule 没有适用范围、已提供 training profile 但缺 horizon/stride、配置键顺序变化。robot/training profile 完全未提供合法，且不能把占位值变成真实语义。
-- [ ] **Step 5: 实现规范化配置与 hash。** `QualityConfig.from_mapping` 只接受显式 schema；使用递归排序、稳定数字和 UTF-8 JSON 生成 hash；保存 requested config 和 effective config。
-- [ ] **Step 6: 写 execution plan 测试。** 覆盖相同输入生成相同 ID、不同 camera/维度组生成不同 ID、计划与结果集合不一致、重复结果和缺终态。
-- [ ] **Step 7: 实现 `ExecutionPlan`。** 提供 `build_plan(...)`、`validate_terminal_results(...)`、`coverage_summary(...)`；重试作为 attempt 记录，不重复发布 unit result。
-- [ ] **Step 8: 运行测试并提交。**
+- [x] **Step 3: 实现不可变契约。** 使用 `Enum` 和 `dataclass(frozen=True)`；`UnitResult` 强制 `plan_unit_id`、四层状态、coverage 和 reason code，所有 `PASS/REVIEW/EXCLUDE_CANDIDATE` 必须具有适用且已计算的 measurement 和显式 rule ID/version；SKIPPED/FAILED/CANCELLED 必须 UNASSESSED 且带原因。EXCLUDE_CANDIDATE 还须有适用的校准来源，PASS 须满足覆盖要求；嵌套字段同样不可变。
+- [x] **Step 4: 写配置失败测试。** 覆盖缺 `contract_version`、未知 metric、quality rule 没有适用范围、已提供 training profile 但缺 horizon/stride、配置键顺序变化。robot/training profile 完全未提供合法，且不能把占位值变成真实语义。
+- [x] **Step 5: 实现规范化配置与 hash。** `QualityConfig.from_mapping` 只接受显式 schema；使用递归排序、稳定数字和 UTF-8 JSON 生成 hash；保存 requested config 和 effective config。
+- [x] **Step 6: 写 execution plan 测试。** 覆盖相同输入生成相同 ID、不同 camera/维度组生成不同 ID、计划与结果集合不一致、重复结果和缺终态。
+- [x] **Step 7: 实现 `ExecutionPlan`。** 提供 `build_plan(...)`、`validate_terminal_results(...)`、`coverage_summary(...)`；重试作为 attempt 记录，不重复发布 unit result。
+- [x] **Step 8: 运行测试并提交。**
 
 ```bash
 pytest tests/test_quality_contracts.py tests/test_quality_config.py tests/test_quality_execution_plan.py -q
@@ -81,18 +81,18 @@ git commit -m "feat: add RDA quality contracts and execution plan"
 - `decode_media_interval(ref: MediaRef, target_times: Sequence[float], mode: str) -> Iterator[DecodedFrame]`：仅返回 `[from_timestamp, to_timestamp)` 内且真实 PTS 合法的帧。
 - `EpisodeSegment` 保存源路径、row start/end、原始 timestamp 和 task 身份；`DecodedFrame` 保存目标时间、PTS、time_base、frame index、采样误差。
 
-- [ ] **Step 1: 写 v3 边界失败测试。** 构造两个 episode 共用 Parquet/MP4，加入非零视频起点、跨文件行段、关键帧在前一段和尾部不可解码样本；断言读取不串段且缺段有终态。
-- [ ] **Step 2: 运行边界测试确认失败。**
+- [x] **Step 1: 写 v3 边界失败测试。** 构造两个 episode 共用 Parquet/MP4，加入非零视频起点、跨文件行段、关键帧在前一段和尾部不可解码样本；断言读取不串段且缺段有终态。
+- [x] **Step 2: 运行边界测试确认失败。**
 
 ```bash
 pytest tests/test_quality_v30_boundaries.py tests/test_quality_media_pts.py -q
 ```
 
-- [ ] **Step 3: 实现 manifest schema。** 校验快照内容摘要、Robovet run ID、预期 episode 集、Parquet 行段、task 和相机 from/to；缺字段返回结构化输入错误。
-- [ ] **Step 4: 修改 v3 loader 使用全部行段。** 读取所需列并保留原始 timestamp、frame/global index；对不支持的布局抛出 `unsupported_layout`，不合成时间轴掩盖缺失。
-- [ ] **Step 5: 实现 PTS 受限解码。** seek 只作为起点；逐帧过滤目标区间，校验当前 episode 上界并返回真实 PTS；记录 attempted/computed/error 数。
-- [ ] **Step 6: 写错误覆盖测试。** 覆盖缺媒体、单相机失败、跨文件 episode、输入文件被替换、空 episode、共享媒体重叠区间。
-- [ ] **Step 7: 运行输入测试并提交。**
+- [x] **Step 3: 实现 manifest schema。** 校验快照内容摘要、Robovet run ID、预期 episode 集、Parquet 行段、task 和相机 from/to；缺字段返回结构化输入错误。
+- [x] **Step 4: 修改 v3 loader 使用全部行段。** 读取所需列并保留原始 timestamp、frame/global index；对不支持的布局抛出 `unsupported_layout`，不合成时间轴掩盖缺失。
+- [x] **Step 5: 实现 PTS 受限解码。** seek 只作为起点；逐帧过滤目标区间，校验当前 episode 上界并返回真实 PTS；记录 attempted/computed/error 数。
+- [x] **Step 6: 写错误覆盖测试。** 覆盖缺媒体、单相机失败、跨文件 episode、输入文件被替换、空 episode、共享媒体重叠区间。
+- [x] **Step 7: 运行输入测试并提交。**
 
 ```bash
 pytest tests/test_quality_input_manifest.py tests/test_quality_v30_boundaries.py tests/test_quality_media_pts.py -q
@@ -122,7 +122,7 @@ git commit -m "feat: enforce quality input and media episode boundaries"
 - [ ] **Step 2: 写视觉测量失败测试。** 覆盖样本实际 PTS 落在 episode 外、计划 10 帧但成功 6 帧、局部模糊、短曝光和冻结区间；断言 coverage 不等于 planned count。
 - [ ] **Step 3: 实现共享特征。** 有 robot profile 时按 dimension group 分开计算；无 profile 时保留原始逐维统计，物理语义和训练窗口保持 UNKNOWN/UNASSESSED；保留 action command delta、state physical delta 和 image delta；周期量使用环绕差分，离散量不求欧氏范数。
 - [ ] **Step 4: 修正运动指标。** 真实 timestamp 无效时返回测量错误；MAD 零/近零采用显式退化状态；velocity/acceleration 输出单位、差分、平滑和有效样本数。
-- [ ] **Step 5: 修正时序指标。** 接受 training profile 的 horizon、stride、padding 和 delta timestamp；不跨 episode 拼接；输出窗口候选引用和边界原因。
+- [ ] **Step 5: 提取通用时序事实。** 记录单 episode 的时长、活动区间和边界事实；不跨 episode 拼接。真实 trainer 的 horizon、stride、padding、delta timestamp、候选窗口及一致性验证统一由 Task 5 实现。
 - [ ] **Step 6: 修正视觉指标。** 复用 `decode_media_interval`；输出计划样本、实际样本、PTS、相机、ROI、预处理、失败原因和最差片段；quality allowlist 必须把 `video_stream_sync`、joint_limit、schema/integrity、基础时间戳及解码验收列为 delegated；显式请求时给出结构化 UNASSESSED 原因，不运行旧算法或计入质量成功数。
 - [ ] **Step 7: 串行化 measurement record。** 每个 record 必须带 algorithm/version/config hash、applicability、coverage；不填充缺失数值为 0。
 - [ ] **Step 8: 运行测试并提交。**
@@ -375,7 +375,7 @@ git commit -m "test: verify end to end quality chain"
 3. Task 3 与 Task 4 必须连续评审；Task 4 不得通过旧 calibration API 绕过 Task 3 的 measurement record。
 4. Task 5 需要真实训练 loader 的固定版本；在 loader 尚未提供前只能完成参考实现、差分契约和 UNASSESSED 路径。
 5. Task 11 接在 Task 5 后、报告之前；Task 6、Task 7 形成一个发布单元；没有 completed marker、全量 plan unit 终态和 hash 校验不能交给 Adapter。
-6. Task 12 在 Task 7 后完成；Task 13 是 Task 8 的 producer 前置，先通过再接新协议。Adapter 的 legacy 路径继续回归。执行顺序为 1→2→3→4→5→11→6→7→12→13→8→9→10。
+6. Task 12 在 Task 7 后完成；Task 13 是 Task 8 的 producer 前置，先通过再接新协议。Task 2 契约通过后，Task 13 可在独立 Robovet 仓库提前并行；共享视频的 LeRobot v3 时间映射修复须先复核，再实现 producer 导出。Adapter 的 legacy 路径继续回归。执行顺序为 1→2→3→4→5→11→6→7→12→13→8→9→10。
 7. Task 9 明确公司核心事件和两类决策的权威归属；没有该接口，`quality_advice.jsonl` 不得改名或包装成正式训练清单。
 8. Task 10 的代码/合成验证和外部真实验收分别报告；真实 release gates（核心、trainer、数据与标定）满足后才可评价首版企业内部可用性。真实阈值、误报/漏报、容量和训练收益属于 R8 后续校准，不由合成 fixture 代替。
 
@@ -395,3 +395,5 @@ git commit -m "test: verify end to end quality chain"
 本次修订依据已确认设计和用户明确边界，补齐计划遗漏，不增加产品化平台范围。缺真实数据、机器人 profile、训练 loader 或公司核心接入不阻止可独立模块开发；相关真实验收明确为待满足的外部条件。阶段性实现、合成验证和真实内部投产验收分别记录，禁止混报完成。
 
 状态合法性：measurement 只可附于 COMPUTED；UNKNOWN + COMPUTED 可保留已观测原始事实，但必须有适用性未知原因且 UNASSESSED。NOT_APPLICABLE 不附带伪测量。没有规则时 UNASSESSED。有版本规则才可 REVIEW，已校准适用规则及足够覆盖才可 PASS/EXCLUDE_CANDIDATE。UNKNOWN/NOT_APPLICABLE 必须 UNASSESSED；SKIPPED/FAILED/CANCELLED 不携带 measurement 且必须 UNASSESSED；失败、跳过、取消均有原因。部分有效测量保留实际 coverage，不将缺样本填零。封口不等于计算覆盖完整，更不等于质量通过。
+
+Task 13 时间映射补充：标准 LeRobot v3 的 episode 行 timestamp 与共享视频的 PTS 具有不同起点；按固定版本上游 loader 语义验证并显式记录映射，保留原始 timestamp、视频区间和实际 PTS。规则/恢复绑定更新版本，旧直接时间比较结果不可被复用。不得将旧实现的直接时间比较作为 producer 的新契约。
