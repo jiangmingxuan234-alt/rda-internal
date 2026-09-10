@@ -105,6 +105,7 @@ git commit -m "feat: enforce quality input and media episode boundaries"
 **Files:**
 - Create: `rda/quality/measurements.py`
 - Create: `rda/quality/features.py`
+- Create as needed: `rda/quality/registry.py`、`rda/quality/numeric_features.py`、`rda/quality/visual_features.py`（单一职责的内部实现；公开 measurement/feature 接口不变）
 - Modify: `rda/metrics/motion.py`
 - Modify: `rda/metrics/temporal.py`
 - Modify: `rda/metrics/visual_quality.py`
