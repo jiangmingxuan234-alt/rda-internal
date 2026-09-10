@@ -293,7 +293,7 @@ idle、temporal、freeze 共用一次计算的活动信号，避免三处定义�
 
 `coverage` 分别记录执行计划完成度和原始数据实际采样覆盖，包括 planned/attempted/computed/skipped/failed/cancelled 单元数、适用性分布及采样范围。按计划抽 10 帧且全部成功，可以是计划完成；不能写成该视频帧覆盖 100%。
 
-Adapter 原来的六态只能作为兼容字段，由四层状态派生：运行级优先级固定为 `BLOCKED > ERROR > INTERRUPTED > PARTIAL > COMPLETED`；运行前提失效为 BLOCKED，必需单元 FAILED 为 ERROR，用户中止为 INTERRUPTED，有未终态单元为 PARTIAL，全部计划单元完成才是 COMPLETED。必需单元 SKIPPED/CANCELLED、适用性 UNKNOWN 或评估 UNASSESSED 时，episode 兼容字段为 NOT_AUDITED；其余才按显式规则汇总 REVIEW/EXCLUDE/PASS。兼容字段不能作为新链路唯一判断。
+Adapter 原来的六态只能作为兼容字段，由四层状态派生：运行级优先级固定为 `BLOCKED > ERROR > INTERRUPTED > PARTIAL > COMPLETED`；运行前提失效为 BLOCKED，必需单元 FAILED，或因预算/能力不足而 SKIPPED/CANCELLED（非用户中止、非前提失效）为 ERROR；用户中止为 INTERRUPTED，可选计算覆盖减少为 PARTIAL，其余计划执行完成为 COMPLETED。中断/预算停止时为未执行单元补 CANCELLED/SKIPPED 终态；真正缺少终态的 crash staging 不写完成标记。封口完整性与计算覆盖分开记录，已封口的 INTERRUPTED/PARTIAL 报告不表示检查通过。必需单元 SKIPPED/CANCELLED、适用性 UNKNOWN 或评估 UNASSESSED 时，episode 兼容字段为 NOT_AUDITED；其余才按显式规则汇总 REVIEW/EXCLUDE/PASS。兼容字段不能作为新链路唯一判断。
 
 `informational` 指标缺少判断规则不阻止其他已配置指标给建议，但必须显示 UNASSESSED。`required_for_advice` 指标没有语义、阈值或覆盖时不能输出 PASS。临时启发式可以给带 provisional 标签的 REVIEW；没有命中临时阈值，不等于完成校准后的 PASS。
 
