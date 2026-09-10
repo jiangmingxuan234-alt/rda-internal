@@ -91,3 +91,31 @@ Corrected focused and full verification:
 32 passed in 0.08s
 237 passed, 6 skipped in 0.69s
 ```
+
+## Fix round 1 integration
+
+The original eleven review findings are addressed by the follow-up commits:
+registered metric dispatch uses selected metric parameters and produces
+delegated/deferred UNKNOWN facts; visual units consume bounded Task 2 decoded
+frames with terminal errors, actual PTS coverage, applied ROI, interior
+Laplacian, exposure/clipping, pixel-change and PTS/time span evidence;
+semantic features require independently supplied producer profile facts and
+source-specific canonical mappings; numeric facts publish finite/missing
+counts, timestamp intervals/duration, runs, wrapped derivatives, acceleration
+locations and structured UNKNOWN coverage for invalid sources/timestamps.
+Missing-profile input retains raw named per-dimension facts. Metric outputs are
+scoped to their selected group and measurement type.
+
+Focused integration verification:
+
+```text
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=. /tmp/rda-quality-venv/bin/python -m pytest tests/test_quality_measurements.py tests/test_quality_motion_semantics.py tests/test_quality_visual_measurements.py tests/test_quality_config.py tests/test_quality_semantic_binding.py -q
+72 passed in 0.12s
+```
+
+Final full-suite verification after binding integration:
+
+```text
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=. /tmp/rda-quality-venv/bin/python -m pytest -q
+289 passed, 6 skipped in 0.77s
+```
