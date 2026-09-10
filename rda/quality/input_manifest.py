@@ -26,6 +26,8 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, Iterator, Mapping
 
+from rda.quality.semantic_binding import normalize_producer_profile
+
 
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
@@ -128,6 +130,8 @@ class QualityInputManifest:
     expected_episode_ids: tuple[int, ...]
     episodes: Mapping[int, EpisodeManifest]
     sources: Mapping[str, SourceFile]
+    robot_profile: Mapping[str, Any] | None = None
+    producer_artifact_path: Path | None = None
 
 
 def _error(code: str, message: str, location: str | None = None) -> QualityInputError:
@@ -293,6 +297,29 @@ def load_quality_manifest(path: Path) -> QualityInputManifest:
     for source in sources.values():
         verify_source(source)
 
+    robot_profile = None
+    artifact_path = None
+    if "robot_profile" in root or "artifact_relative_path" in producer:
+        artifact_relative = _relative_path(_required(producer, "artifact_relative_path", "producer"), "producer.artifact_relative_path")
+        artifact_path = _resolve_source(path.parent.resolve(), artifact_relative, "producer.artifact_relative_path")
+        artifact = _read_producer_artifact(artifact_path, artifact_hash)
+        for artifact_field in ("producer", "snapshot_identity", "binding"):
+            _mapping(artifact.get(artifact_field), f"producer artifact.{artifact_field}")
+        if (artifact.get("contract_version") != 1 or isinstance(artifact.get("contract_version"), bool)
+                or artifact.get("producer", {}).get("robovet_run_id") != run_id
+                or artifact.get("producer", {}).get("mode") != "full"
+                or artifact.get("snapshot_identity", {}).get("digest") != digest
+                or artifact.get("binding", {}).get("status") != "complete"):
+            raise _error("producer_artifact_mismatch", "producer artifact identity, scope or binding differs from manifest", "producer")
+        if "robot_profile" in root:
+            try:
+                robot_profile = normalize_producer_profile(root["robot_profile"])
+                original_profile = normalize_producer_profile(artifact.get("robot_profile"))
+            except (ValueError, TypeError) as exc:
+                raise _error("invalid_robot_profile", str(exc), "robot_profile") from exc
+            if robot_profile != original_profile:
+                raise _error("producer_profile_mismatch", "robot_profile differs from the hash-bound producer artifact", "robot_profile")
+
     episodes: dict[int, EpisodeManifest] = {}
     for episode_index, value in enumerate(_list(_required(root, "episodes", "manifest"), "episodes")):
         location = f"episodes[{episode_index}]"
@@ -435,7 +462,7 @@ def load_quality_manifest(path: Path) -> QualityInputManifest:
                     "overlapping episode intervals on a shared media stream require shared_source_bounded disposition",
                     "episodes.media",
                 )
-    return QualityInputManifest(version, path.resolve(), dataset_root, run_id, artifact_hash, digest, guarantee, clock_domain, mapping_version, expected_ids, MappingProxyType(episodes), MappingProxyType(sources))
+    return QualityInputManifest(version, path.resolve(), dataset_root, run_id, artifact_hash, digest, guarantee, clock_domain, mapping_version, expected_ids, MappingProxyType(episodes), MappingProxyType(sources), robot_profile, artifact_path)
 
 
 def iter_episode_segments(manifest: QualityInputManifest, episode_id: int) -> Iterator[EpisodeSegment]:
@@ -445,3 +472,24 @@ def iter_episode_segments(manifest: QualityInputManifest, episode_id: int) -> It
     except KeyError:
         raise _error("unknown_episode", f"episode {episode_id} is outside the verified scope") from None
     yield from episode.row_segments
+
+
+def _read_producer_artifact(path: Path, expected_hash: str) -> Mapping[str, Any]:
+    try:
+        raw = path.read_bytes()
+    except OSError as exc:
+        raise _error("producer_artifact_unavailable", f"cannot read producer artifact: {exc}", "producer.artifact_relative_path") from exc
+    if hashlib.sha256(raw).hexdigest() != expected_hash:
+        raise _error("producer_artifact_mismatch", "producer artifact SHA256 differs from sealed binding", "producer.artifact_sha256")
+    try:
+        return _mapping(json.loads(raw), "producer artifact")
+    except (ValueError, UnicodeError) as exc:
+        raise _error("invalid_producer_artifact", f"cannot parse producer artifact: {exc}", "producer") from exc
+
+
+def verify_producer_artifact(manifest: QualityInputManifest) -> None:
+    """Revalidate original staged evidence before publication (Task 6 runner)."""
+    if manifest.producer_artifact_path is not None:
+        relative = manifest.producer_artifact_path.relative_to(manifest.path.parent).as_posix()
+        safe = _resolve_source(manifest.path.parent, relative, "producer.artifact_relative_path")
+        _read_producer_artifact(safe, manifest.producer_artifact_sha256)

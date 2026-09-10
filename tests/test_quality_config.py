@@ -15,7 +15,7 @@ def _config():
                 {
                     "name": "idle_ratio",
                     "role": "informational",
-                    "parameters": {"epsilon": 0.01},
+                    "parameters": {"activity_epsilon": 0.01},
                 }
             ]
         },
@@ -93,7 +93,7 @@ def test_key_order_does_not_change_config_hash():
         "quality": {
             "metrics": [
                 {
-                    "parameters": {"epsilon": 0.0100},
+                    "parameters": {"activity_epsilon": 0.0100},
                     "role": "informational",
                     "name": "idle_ratio",
                 }
@@ -230,15 +230,12 @@ def test_structurally_complete_robot_profile_is_preserved():
 
 
 def test_source_binding_is_content_addressed_and_changes_effective_hash():
+    from test_quality_semantic_binding import bound_robot, seal_mapping
     value = _config()
-    value["robot"] = {
-        "profile_id": "robot-1", "action_field": "action", "state_field": "state",
-        "action_representation": "velocity", "coordinate_frame": "base",
-        "dimension_groups": {"arm": {"indices": [0], "physical_quantity": "angle", "unit": "rad"}}, "cameras": [],
-        "source_binding": {"profile_revision": "3", "profile_content_hash": "sha256:" + "a" * 64, "mapping_version": "v1", "mapping_hash": "sha256:" + "b" * 64},
-    }
+    value["robot"] = bound_robot()
     bound = QualityConfig.from_mapping(value)
-    value["robot"]["source_binding"]["mapping_hash"] = "sha256:" + "c" * 64
+    value["robot"]["signal_mappings"]["action"]["groups"]["arm"]["indices"] = [0]
+    seal_mapping(value["robot"])
     assert bound.effective_config_hash != QualityConfig.from_mapping(value).effective_config_hash
 
 
@@ -281,4 +278,37 @@ def test_robot_dimension_group_members_are_structural():
         "cameras": ["observation.images.front"],
     }
     with pytest.raises(ValueError, match="dimension_groups.arm"):
+        QualityConfig.from_mapping(value)
+
+
+@pytest.mark.parametrize("name,parameters", [
+    ("idle_ratio", {"epsilon": 0.01}), ("idle_ratio", {"activity_epsilon": -1}),
+    ("idle_ratio", {"activity_epsilon": True}), ("action_discontinuity", {"mad_tolerance": "tiny"}),
+    ("action_discontinuity", {"mad_tolerance": float("inf")}),
+    ("velocity_acceleration", {"smoothing": "boxcar"}),
+    ("video_freeze", {"low_change_threshold": -1}),
+    ("visual_quality", {"preprocess": {"resize": [10, 10]}}),
+])
+def test_metric_parameters_reject_invalid_or_unimplemented_behavior(name, parameters):
+    value = {"contract_version": 1, "quality": {"metrics": [{"name": name, "role": "informational", "parameters": parameters}]}}
+    with pytest.raises(ValueError):
+        QualityConfig.from_mapping(value)
+
+
+@pytest.mark.parametrize("name,disposition", [
+    ("missing_dropout", "delegated"), ("invalid_values", "delegated"),
+    ("schema_consistency", "delegated"), ("video_frame_integrity", "delegated"),
+    ("distribution", "deferred"), ("coverage", "deferred"),
+])
+def test_registry_accepts_owned_checks_with_explicit_nonmeasurement_disposition(name, disposition):
+    from rda.quality import registry
+    value = {"contract_version": 1, "quality": {"metrics": [{"name": name, "role": "informational"}]}}
+    config = QualityConfig.from_mapping(value)
+    assert registry.metric_spec(config.quality["metrics"][0]["name"]).disposition == disposition
+
+
+@pytest.mark.parametrize("name", [[], {}, None])
+def test_malformed_metric_identity_is_an_input_value_error(name):
+    value = {"contract_version": 1, "quality": {"metrics": [{"name": name, "role": "informational"}]}}
+    with pytest.raises(ValueError, match="unknown metric"):
         QualityConfig.from_mapping(value)

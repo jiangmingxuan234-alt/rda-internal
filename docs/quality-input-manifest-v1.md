@@ -117,3 +117,32 @@ subtracted.  Decoded stream ordinal is separate from a LeRobot frame index.
 Because bounded decoding seeks before decoding, the reported ordinal is local
 to that seek/decode pass; cross-request frame identity is the protected source
 hash together with stream index and PTS.
+
+## Optional robot profile and staged producer artifact
+
+The optional top-level `robot_profile` preserves the exact Task 13 original
+profile facts described in [quality-semantic-profile-schema-v1.md](quality-semantic-profile-schema-v1.md).
+When present, `producer.artifact_relative_path` is required. It is a normalized
+relative path beneath the manifest's own directory (not `dataset_root`);
+absolute paths, `..` components and symlink escapes are rejected.
+
+Adapter 8 verifies the original sealed full Robovet report and copies the
+byte-identical `quality-producer-v1.json` into a separate read-only staging area
+before RDA starts. It preserves its sealed digest in `producer.artifact_sha256`.
+The copied artifact is outside the original dataset source catalog and must
+never be added to `snapshot_identity.sources` or alter its historical digest.
+RDA hashes the copied bytes, checks producer run ID/full mode, complete binding
+and snapshot digest against the manifest, and compares the complete normalized
+profile (including ordered signals). Merely inserting a profile/hash into a
+manifest does not authorize semantics. Unknown/malformed profile fields and
+mismatches are structured `QualityInputError`s.
+
+`QualityInputManifest.robot_profile` is immutable verified data or `None`;
+`producer_artifact_path` retains the verified staging location or `None`.
+`verify_producer_artifact(manifest)` rechecks its safe location and exact content
+hash; Task 6 must call it together with source snapshot revalidation before
+publishing a completed result. Adapter 8 remains responsible for original
+report acceptance/seal verification; RDA does not reimplement that verdict.
+A manifest without a robot profile or artifact path remains a valid v1 input
+for raw observations. A staged artifact may carry explicit absent/incomplete
+profile facts; those are retained without granting physical semantic authority.

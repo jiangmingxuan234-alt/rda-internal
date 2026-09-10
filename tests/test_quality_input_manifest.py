@@ -293,3 +293,93 @@ def test_manifest_rejects_nonpositive_media_clock_scale(tmp_path, scale):
     with pytest.raises(QualityInputError) as caught:
         load_quality_manifest(_write(root, raw))
     assert caught.value.code == "invalid_manifest"
+
+
+def _with_profile_artifact(root, raw):
+    from test_quality_semantic_binding import profile_facts
+    profile = profile_facts()
+    artifact = {"contract_version": 1, "producer": {"robovet_run_id": raw["producer"]["robovet_run_id"], "mode": "full"},
+                "snapshot_identity": {"digest": raw["snapshot_identity"]["digest"]},
+                "binding": {"status": "complete", "reasons": []}, "robot_profile": profile}
+    path = root / "inputs" / "quality-producer-v1.json"
+    path.parent.mkdir()
+    path.write_text(json.dumps(artifact))
+    raw["producer"].update(artifact_relative_path="inputs/quality-producer-v1.json", artifact_sha256=_sha(path))
+    raw["robot_profile"] = copy.deepcopy(profile)
+    return path
+
+
+def test_profile_is_retained_only_after_comparison_with_bound_producer_artifact(tmp_path):
+    raw, _ = _base_manifest(tmp_path)
+    artifact = _with_profile_artifact(tmp_path, raw)
+    manifest = load_quality_manifest(_write(tmp_path, raw))
+    assert manifest.robot_profile["signals"][0]["joint_names"] == ("j0", "j1")
+    assert manifest.producer_artifact_path == artifact
+    assert "inputs/quality-producer-v1.json" not in manifest.sources
+    with pytest.raises(TypeError):
+        manifest.robot_profile["signals"][0]["unit"] = "deg"
+
+
+@pytest.mark.parametrize("mutation,code", [
+    (lambda raw: raw["producer"].pop("artifact_relative_path"), "missing_field"),
+    (lambda raw: raw["producer"].update(artifact_sha256="f" * 64), "producer_artifact_mismatch"),
+    (lambda raw: raw["producer"].update(robovet_run_id="another-run"), "producer_artifact_mismatch"),
+    (lambda raw: raw["robot_profile"]["signals"][0].update(unit="deg"), "producer_profile_mismatch"),
+    (lambda raw: raw["producer"].update(artifact_relative_path="../outside.json"), "unsafe_path"),
+])
+def test_profile_cannot_be_authorized_by_unverified_manifest_claim(tmp_path, mutation, code):
+    raw, _ = _base_manifest(tmp_path)
+    _with_profile_artifact(tmp_path, raw)
+    mutation(raw)
+    with pytest.raises(QualityInputError) as caught:
+        load_quality_manifest(_write(tmp_path, raw))
+    assert caught.value.code == code
+
+
+def test_producer_artifact_replacement_is_detected_on_revalidation(tmp_path):
+    from rda.quality import input_manifest
+    raw, _ = _base_manifest(tmp_path)
+    artifact = _with_profile_artifact(tmp_path, raw)
+    manifest = load_quality_manifest(_write(tmp_path, raw))
+    artifact.write_text("{}")
+    with pytest.raises(QualityInputError, match="artifact"):
+        input_manifest.verify_producer_artifact(manifest)
+
+
+@pytest.mark.parametrize("field,value", [("producer", []), ("snapshot_identity", None), ("binding", "complete")])
+def test_malformed_producer_artifact_remains_structured_input_failure(tmp_path, field, value):
+    raw, _ = _base_manifest(tmp_path)
+    artifact_path = _with_profile_artifact(tmp_path, raw)
+    artifact = json.loads(artifact_path.read_text())
+    artifact[field] = value
+    artifact_path.write_text(json.dumps(artifact))
+    raw["producer"]["artifact_sha256"] = _sha(artifact_path)
+    with pytest.raises(QualityInputError):
+        load_quality_manifest(_write(tmp_path, raw))
+
+
+def test_absent_producer_profile_is_retained_without_invented_identity(tmp_path):
+    raw, _ = _base_manifest(tmp_path)
+    artifact_path = _with_profile_artifact(tmp_path, raw)
+    absent = {"status": "absent", "raw_sha256": None, "schema_version": None,
+              "profile_id": None, "revision": None, "robot_type": None, "signals": []}
+    artifact = json.loads(artifact_path.read_text())
+    artifact["robot_profile"] = absent
+    artifact_path.write_text(json.dumps(artifact))
+    raw["producer"]["artifact_sha256"] = _sha(artifact_path)
+    raw["robot_profile"] = absent
+    manifest = load_quality_manifest(_write(tmp_path, raw))
+    assert manifest.robot_profile["status"] == "absent"
+    assert manifest.robot_profile["profile_id"] is None
+
+
+def test_artifact_symlink_escape_is_rejected(tmp_path):
+    raw, _ = _base_manifest(tmp_path)
+    artifact = _with_profile_artifact(tmp_path, raw)
+    outside = tmp_path.parent / (tmp_path.name + "-artifact.json")
+    outside.write_bytes(artifact.read_bytes())
+    artifact.unlink()
+    artifact.symlink_to(outside)
+    with pytest.raises(QualityInputError) as caught:
+        load_quality_manifest(_write(tmp_path, raw))
+    assert caught.value.code == "unsafe_path"

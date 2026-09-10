@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from typing import Any, Mapping
 
 from rda.quality.contracts import FrozenDict, freeze_json, thaw_json
+from rda.quality.semantic_binding import validate_robot_mapping
+from rda.quality.registry import METRICS, validate_parameters
 
 
 _TOP_LEVEL_FIELDS = {"contract_version", "robot", "quality", "training"}
@@ -25,9 +27,8 @@ _PERIODIC_DIMENSION_FIELDS = {"index", "period"}
 _ROBOT_FIELDS = {
     "profile_id", "action_field", "state_field", "action_representation",
     "coordinate_frame", "dimension_groups", "periodic_dimensions",
-    "discrete_dimensions", "cameras", "source_binding",
+    "discrete_dimensions", "cameras", "source_binding", "signal_mappings",
 }
-_SOURCE_BINDING_FIELDS = {"profile_revision", "profile_content_hash", "mapping_version", "mapping_hash"}
 _TRAINING_FIELDS = {
     "policy_type", "observation_history", "horizon", "stride", "padding",
     "required_modalities", "delta_timestamps", "camera_tolerance",
@@ -41,26 +42,9 @@ _CALIBRATION_STATUSES = {"uncalibrated", "calibrated"}
 _SHA256_PATTERN = re.compile(r"sha256:[0-9a-f]{64}\Z")
 
 
-_QUALITY_METRICS = frozenset({
-    "action_discontinuity", "idle_ratio", "velocity_acceleration",
-    "sampling_jitter", "visual_quality", "video_freeze",
-    "temporal_sufficiency", "joint_limit", "timestamp_validity",
-    "video_stream_sync", "video_timestamp_alignment", "sensor_synchronization",
-})
-_DELEGATED_METRICS = frozenset({"joint_limit", "timestamp_validity", "video_stream_sync", "video_timestamp_alignment"})
-_DEFERRED_METRICS = frozenset({"temporal_sufficiency", "sensor_synchronization"})
-_METRIC_PARAMETERS = {
-    "action_discontinuity": {"mad_tolerance"}, "idle_ratio": {"activity_epsilon", "epsilon"},
-    "velocity_acceleration": {"smoothing"}, "sampling_jitter": set(),
-    "visual_quality": {"preprocess"}, "video_freeze": {"low_change_threshold", "preprocess"},
-    "temporal_sufficiency": set(), "joint_limit": set(), "timestamp_validity": set(),
-    "video_stream_sync": set(), "video_timestamp_alignment": set(), "sensor_synchronization": set(),
-}
-
-
 def _known_metric_names() -> frozenset[str]:
     """Versioned quality registry, deliberately independent of legacy metrics."""
-    return _QUALITY_METRICS
+    return frozenset(METRICS)
 
 
 def _mapping(value: Any, path: str) -> Mapping[str, Any]:
@@ -164,7 +148,7 @@ class QualityConfig:
             metric = _mapping(raw_metric, path)
             _reject_unknown(metric, _METRIC_FIELDS, path)
             name = metric.get("name")
-            if name not in known_metrics:
+            if not isinstance(name, str) or name not in known_metrics:
                 raise ValueError(f"unknown metric: {name!r}")
             if name in seen:
                 raise ValueError(f"duplicate metric: {name}")
@@ -173,9 +157,7 @@ class QualityConfig:
             if role not in _METRIC_ROLES:
                 raise ValueError(f"{path}.role must be informational or required_for_advice")
             parameters = _mapping(metric.get("parameters", {}), f"{path}.parameters")
-            unknown_parameters = sorted(set(parameters) - _METRIC_PARAMETERS[name])
-            if unknown_parameters:
-                raise ValueError(f"unknown parameters for {name}: {unknown_parameters}")
+            parameters = validate_parameters(name, parameters)
             normalized_metric: dict[str, Any] = {
                 "name": name,
                 "role": role,
@@ -256,16 +238,6 @@ class QualityConfig:
                 raise ValueError(f"robot profile missing fields: {missing_robot}")
             for field in ("profile_id", "action_field", "state_field", "coordinate_frame"):
                 _nonempty_string(raw_robot[field], f"robot.{field}")
-            if "source_binding" in raw_robot:
-                binding = _mapping(raw_robot["source_binding"], "robot.source_binding")
-                _reject_unknown(binding, _SOURCE_BINDING_FIELDS, "robot.source_binding")
-                if set(binding) != _SOURCE_BINDING_FIELDS:
-                    raise ValueError("robot.source_binding requires profile revision and mapping identity")
-                for field in ("profile_revision", "mapping_version"):
-                    _nonempty_string(binding[field], f"robot.source_binding.{field}")
-                for field in ("profile_content_hash", "mapping_hash"):
-                    if not isinstance(binding[field], str) or not _SHA256_PATTERN.fullmatch(binding[field]):
-                        raise ValueError(f"robot.source_binding.{field} must be a sha256 content hash")
             representation = raw_robot["action_representation"]
             if representation not in _ACTION_REPRESENTATIONS:
                 raise ValueError(
@@ -321,6 +293,7 @@ class QualityConfig:
             discrete = set(raw_robot.get("discrete_dimensions", ()))
             if periodic & discrete:
                 raise ValueError("robot periodic_dimensions and discrete_dimensions must not overlap")
+            validate_robot_mapping(raw_robot)
             robot = freeze_json(raw_robot, path="robot")
 
         training = None
