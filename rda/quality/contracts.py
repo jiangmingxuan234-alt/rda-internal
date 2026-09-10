@@ -105,6 +105,41 @@ class QualityRunState(str, Enum):
 
 
 @dataclass(frozen=True)
+class MeasurementRecord:
+    """An immutable calculated fact, intentionally without an assessment."""
+    plan_unit_id: str
+    metric_name: str
+    algorithm_version: str
+    effective_config_hash: str
+    applicability: Applicability
+    coverage: Mapping[str, Any]
+    values: Mapping[str, Any]
+    evidence: Iterable[Mapping[str, Any]]
+
+    def __post_init__(self) -> None:
+        for name in ("plan_unit_id", "metric_name", "algorithm_version", "effective_config_hash"):
+            if not isinstance(getattr(self, name), str) or not getattr(self, name).strip():
+                raise ValueError(f"{name} must be a non-empty string")
+        if not _SHA256_PATTERN.fullmatch(self.effective_config_hash):
+            raise ValueError("effective_config_hash must be a sha256 content hash")
+        object.__setattr__(self, "applicability", Applicability(self.applicability))
+        coverage = freeze_json(self.coverage, path="coverage")
+        values = freeze_json(self.values, path="values")
+        evidence = freeze_json(tuple(self.evidence), path="evidence")
+        if not isinstance(coverage, FrozenDict) or not isinstance(values, FrozenDict):
+            raise TypeError("coverage and values must be mappings")
+        object.__setattr__(self, "coverage", coverage)
+        object.__setattr__(self, "values", values)
+        object.__setattr__(self, "evidence", evidence)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"plan_unit_id": self.plan_unit_id, "metric_name": self.metric_name,
+                "algorithm_version": self.algorithm_version, "effective_config_hash": self.effective_config_hash,
+                "applicability": self.applicability.value, "coverage": thaw_json(self.coverage),
+                "values": thaw_json(self.values), "evidence": thaw_json(self.evidence)}
+
+
+@dataclass(frozen=True)
 class QualityRequest:
     dataset_root: Path
     input_manifest: Path

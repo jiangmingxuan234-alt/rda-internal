@@ -21,11 +21,13 @@ _RULE_FIELDS = {
 _CALIBRATION_FIELDS = {"calibration_id", "calibration_hash"}
 _SCOPE_FIELDS = {"all", "tasks", "cameras", "dimension_groups", "robot_profile_ids"}
 _DIMENSION_GROUP_FIELDS = {"indices", "physical_quantity", "unit"}
+_PERIODIC_DIMENSION_FIELDS = {"index", "period"}
 _ROBOT_FIELDS = {
     "profile_id", "action_field", "state_field", "action_representation",
     "coordinate_frame", "dimension_groups", "periodic_dimensions",
-    "discrete_dimensions", "cameras",
+    "discrete_dimensions", "cameras", "source_binding",
 }
+_SOURCE_BINDING_FIELDS = {"profile_revision", "profile_content_hash", "mapping_version", "mapping_hash"}
 _TRAINING_FIELDS = {
     "policy_type", "observation_history", "horizon", "stride", "padding",
     "required_modalities", "delta_timestamps", "camera_tolerance",
@@ -39,10 +41,19 @@ _CALIBRATION_STATUSES = {"uncalibrated", "calibrated"}
 _SHA256_PATTERN = re.compile(r"sha256:[0-9a-f]{64}\Z")
 
 
-def _known_metric_names() -> frozenset[str]:
-    from rda.metrics import ALL_METRICS
+_QUALITY_METRICS = frozenset({
+    "action_discontinuity", "idle_ratio", "velocity_acceleration",
+    "sampling_jitter", "visual_quality", "video_freeze",
+    "temporal_sufficiency", "joint_limit", "timestamp_validity",
+    "video_stream_sync", "video_timestamp_alignment", "sensor_synchronization",
+})
+_DELEGATED_METRICS = frozenset({"joint_limit", "timestamp_validity", "video_stream_sync", "video_timestamp_alignment"})
+_DEFERRED_METRICS = frozenset({"temporal_sufficiency", "sensor_synchronization"})
 
-    return frozenset(metric.name for metric in ALL_METRICS)
+
+def _known_metric_names() -> frozenset[str]:
+    """Versioned quality registry, deliberately independent of legacy metrics."""
+    return _QUALITY_METRICS
 
 
 def _mapping(value: Any, path: str) -> Mapping[str, Any]:
@@ -235,6 +246,16 @@ class QualityConfig:
                 raise ValueError(f"robot profile missing fields: {missing_robot}")
             for field in ("profile_id", "action_field", "state_field", "coordinate_frame"):
                 _nonempty_string(raw_robot[field], f"robot.{field}")
+            if "source_binding" in raw_robot:
+                binding = _mapping(raw_robot["source_binding"], "robot.source_binding")
+                _reject_unknown(binding, _SOURCE_BINDING_FIELDS, "robot.source_binding")
+                if set(binding) != _SOURCE_BINDING_FIELDS:
+                    raise ValueError("robot.source_binding requires profile revision and mapping identity")
+                for field in ("profile_revision", "mapping_version"):
+                    _nonempty_string(binding[field], f"robot.source_binding.{field}")
+                for field in ("profile_content_hash", "mapping_hash"):
+                    if not isinstance(binding[field], str) or not _SHA256_PATTERN.fullmatch(binding[field]):
+                        raise ValueError(f"robot.source_binding.{field} must be a sha256 content hash")
             representation = raw_robot["action_representation"]
             if representation not in _ACTION_REPRESENTATIONS:
                 raise ValueError(
@@ -266,15 +287,27 @@ class QualityConfig:
                 _nonempty_string(group["physical_quantity"], f"{group_path}.physical_quantity")
                 _nonempty_string(group["unit"], f"{group_path}.unit")
             _string_list(raw_robot["cameras"], "robot.cameras", allow_empty=True)
-            for field in ("periodic_dimensions", "discrete_dimensions"):
-                if field in raw_robot:
-                    dimensions = raw_robot[field]
-                    if not isinstance(dimensions, (list, tuple)) or any(
-                        isinstance(item, bool) or not isinstance(item, int) or item < 0
-                        for item in dimensions
-                    ):
-                        raise ValueError(f"robot.{field} must be a list of non-negative integers")
-            periodic = set(raw_robot.get("periodic_dimensions", ()))
+            if "periodic_dimensions" in raw_robot:
+                dimensions = raw_robot["periodic_dimensions"]
+                if not isinstance(dimensions, (list, tuple)):
+                    raise ValueError("robot.periodic_dimensions must be a list")
+                indices: list[int] = []
+                for item in dimensions:
+                    item = _mapping(item, "robot.periodic_dimensions[]")
+                    _reject_unknown(item, _PERIODIC_DIMENSION_FIELDS, "robot.periodic_dimensions[]")
+                    if set(item) != _PERIODIC_DIMENSION_FIELDS or isinstance(item["index"], bool) or not isinstance(item["index"], int) or item["index"] < 0:
+                        raise ValueError("robot.periodic_dimensions entries require a non-negative index")
+                    period = item["period"]
+                    if isinstance(period, bool) or not isinstance(period, (int, float)) or not math.isfinite(period) or period <= 0:
+                        raise ValueError("robot.periodic_dimensions period must be finite and positive")
+                    indices.append(item["index"])
+                if len(indices) != len(set(indices)):
+                    raise ValueError("robot.periodic_dimensions must not duplicate indices")
+            if "discrete_dimensions" in raw_robot:
+                dimensions = raw_robot["discrete_dimensions"]
+                if not isinstance(dimensions, (list, tuple)) or any(isinstance(item, bool) or not isinstance(item, int) or item < 0 for item in dimensions):
+                    raise ValueError("robot.discrete_dimensions must be a list of non-negative integers")
+            periodic = {item["index"] for item in raw_robot.get("periodic_dimensions", ())}
             discrete = set(raw_robot.get("discrete_dimensions", ()))
             if periodic & discrete:
                 raise ValueError("robot periodic_dimensions and discrete_dimensions must not overlap")

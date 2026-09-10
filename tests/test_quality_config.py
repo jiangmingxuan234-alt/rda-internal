@@ -229,6 +229,19 @@ def test_structurally_complete_robot_profile_is_preserved():
     assert config.robot["profile_id"] == "robot-1"
 
 
+def test_source_binding_is_content_addressed_and_changes_effective_hash():
+    value = _config()
+    value["robot"] = {
+        "profile_id": "robot-1", "action_field": "action", "state_field": "state",
+        "action_representation": "velocity", "coordinate_frame": "base",
+        "dimension_groups": {"arm": {"indices": [0], "physical_quantity": "angle", "unit": "rad"}}, "cameras": [],
+        "source_binding": {"profile_revision": "3", "profile_content_hash": "sha256:" + "a" * 64, "mapping_version": "v1", "mapping_hash": "sha256:" + "b" * 64},
+    }
+    bound = QualityConfig.from_mapping(value)
+    value["robot"]["source_binding"]["mapping_hash"] = "sha256:" + "c" * 64
+    assert bound.effective_config_hash != QualityConfig.from_mapping(value).effective_config_hash
+
+
 @pytest.mark.parametrize("field", ["reference_set", "sampling", "resource_budget"])
 def test_quality_profile_containers_must_be_mappings(field):
     value = _config()
