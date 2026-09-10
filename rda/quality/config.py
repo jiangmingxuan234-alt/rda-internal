@@ -49,6 +49,13 @@ _QUALITY_METRICS = frozenset({
 })
 _DELEGATED_METRICS = frozenset({"joint_limit", "timestamp_validity", "video_stream_sync", "video_timestamp_alignment"})
 _DEFERRED_METRICS = frozenset({"temporal_sufficiency", "sensor_synchronization"})
+_METRIC_PARAMETERS = {
+    "action_discontinuity": {"mad_tolerance"}, "idle_ratio": {"activity_epsilon", "epsilon"},
+    "velocity_acceleration": {"smoothing"}, "sampling_jitter": set(),
+    "visual_quality": {"preprocess"}, "video_freeze": {"low_change_threshold", "preprocess"},
+    "temporal_sufficiency": set(), "joint_limit": set(), "timestamp_validity": set(),
+    "video_stream_sync": set(), "video_timestamp_alignment": set(), "sensor_synchronization": set(),
+}
 
 
 def _known_metric_names() -> frozenset[str]:
@@ -166,6 +173,9 @@ class QualityConfig:
             if role not in _METRIC_ROLES:
                 raise ValueError(f"{path}.role must be informational or required_for_advice")
             parameters = _mapping(metric.get("parameters", {}), f"{path}.parameters")
+            unknown_parameters = sorted(set(parameters) - _METRIC_PARAMETERS[name])
+            if unknown_parameters:
+                raise ValueError(f"unknown parameters for {name}: {unknown_parameters}")
             normalized_metric: dict[str, Any] = {
                 "name": name,
                 "role": role,

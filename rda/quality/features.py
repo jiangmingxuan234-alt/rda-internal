@@ -73,11 +73,16 @@ def _arrays(episode: EpisodeData, config: QualityConfig) -> tuple[np.ndarray | N
     return action, state
 
 
-def compute_shared_features(episode: EpisodeData, config: QualityConfig) -> SharedFeatures:
+def compute_shared_features(episode: EpisodeData, config: QualityConfig, *, producer_binding: Mapping[str, Any] | None = None) -> SharedFeatures:
     """Compute explicit action/state observations without a legacy metric call."""
     action, state = _arrays(episode, config)
     semantic = "UNKNOWN"
-    if config.robot is not None and "source_binding" in config.robot:
+    if config.robot is not None and "source_binding" in config.robot and producer_binding is not None and (
+        producer_binding.get("profile_id") == config.robot["profile_id"]
+        and producer_binding.get("revision") == config.robot["source_binding"]["profile_revision"]
+        and producer_binding.get("raw_sha256") == config.robot["source_binding"]["profile_content_hash"]
+        and producer_binding.get("status") == "complete"
+    ):
         semantic = "BOUND"
     numeric: dict[str, Any] = {"timestamps": {"sample_count": int(len(episode.timestamps))}}
     timestamps = np.asarray(episode.timestamps, dtype=float)
@@ -125,10 +130,13 @@ def compute_shared_features(episode: EpisodeData, config: QualityConfig) -> Shar
                         entry["activity_count"] = int(np.count_nonzero(np.abs(np.diff(values)) > 0))
                 if kind == "state":
                     if semantic == "BOUND" and valid_time:
-                        derivative = np.diff(values) / np.diff(timestamps)
+                        state_delta = np.diff(values)
+                        if index in periodic:
+                            state_delta = (state_delta + periodic[index] / 2.0) % periodic[index] - periodic[index] / 2.0
+                        derivative = state_delta / np.diff(timestamps)
                         group = next((group for group in config.robot["dimension_groups"].values() if index in group["indices"]), None)
                         unit = (str(group["unit"]) if group else "unknown") + "/s"
-                        entry["derivative"] = _stat(derivative) | {"unit": unit, "status": "ok"}
+                        entry["derivative"] = _stat(derivative) | {"values": [float(value) for value in derivative], "locations": [int(value) for value in range(len(derivative))], "unit": unit, "difference": "wrapped_first_difference" if index in periodic else "first_difference", "smoothing": "none", "status": "ok"}
                     else:
                         entry["derivative"] = {"status": "UNASSESSED" if semantic == "UNKNOWN" else "invalid_timestamps"}
             dimensions[str(index)] = entry
@@ -140,12 +148,14 @@ def compute_visual_features(frames: Iterable[Mapping[str, Any]], *, planned_samp
     """Calculate bounded frame facts, rejecting decoded PTS outside the unit interval."""
     accepted: list[dict[str, Any]] = []
     failures: list[dict[str, Any]] = []
-    for ordinal, item in enumerate(frames):
-        mapped = float(item["mapped_timestamp"])
+    provider = frames
+    for ordinal, item in enumerate(provider):
+        get = (lambda key, default=None: item.get(key, default)) if isinstance(item, Mapping) else (lambda key, default=None: getattr(item, key, default))
+        mapped = float(get("mapped_timestamp"))
         if not interval[0] <= mapped < interval[1]:
             failures.append({"ordinal": ordinal, "reason": "pts_outside_interval", "mapped_timestamp": mapped})
             continue
-        pixels = np.asarray(item["frame"])
+        pixels = np.asarray(get("frame"))
         gray = pixels.astype(float).mean(axis=2) if pixels.ndim == 3 else pixels.astype(float)
         roi = preprocess.get("roi", "full")
         if roi != "full":
@@ -154,7 +164,7 @@ def compute_visual_features(frames: Iterable[Mapping[str, Any]], *, planned_samp
         laplacian = -4 * gray
         laplacian[1:, :] += gray[:-1, :]; laplacian[:-1, :] += gray[1:, :]
         laplacian[:, 1:] += gray[:, :-1]; laplacian[:, :-1] += gray[:, 1:]
-        accepted.append({"ordinal": ordinal, "target_time": float(item["target_time"]), "mapped_timestamp": mapped, "pts": int(item["pts"]), "camera": item["camera"], "sampling_error": item.get("sampling_error"), "blur_laplacian_variance": float(np.var(laplacian)), "mean_luminance": float(gray.mean()), "pixels": gray})
+        accepted.append({"ordinal": int(get("decoded_frame_ordinal", ordinal)), "target_time": float(get("target_time")), "mapped_timestamp": mapped, "pts": int(get("pts")), "time_base": str(get("time_base")), "mapping_status": get("mapping_status"), "camera": get("camera", getattr(getattr(provider, "ref", None), "feature_key", None)), "sampling_error": get("sampling_error"), "blur_laplacian_variance": float(np.var(laplacian[1:-1, 1:-1])) if min(gray.shape) > 2 else 0.0, "mean_luminance": float(gray.mean()), "pixels": gray})
     spans: list[dict[str, int]] = []
     start = None
     for index in range(1, len(accepted)):
@@ -169,5 +179,8 @@ def compute_visual_features(frames: Iterable[Mapping[str, Any]], *, planned_samp
         spans.append({"start_ordinal": start, "end_ordinal": len(accepted) - 1, "length": len(accepted) - start})
     for item in accepted:
         item.pop("pixels")
-    coverage = {"planned_samples": int(planned_samples), "attempted_samples": len(accepted) + len(failures), "computed_samples": len(accepted), "failed_samples": len(failures)}
+    for error in getattr(provider, "errors", ()):
+        failures.append({"target_time": error.target_time, "reason": error.reason, "detail": error.detail})
+    decoded_coverage = getattr(provider, "coverage", {})
+    coverage = {"planned_samples": int(planned_samples), "attempted_samples": int(decoded_coverage.get("attempted", len(accepted) + len(failures))), "computed_samples": len(accepted), "failed_samples": len(failures)}
     return VisualFeatures(tuple(accepted), tuple(failures), coverage, tuple(spans), dict(preprocess))

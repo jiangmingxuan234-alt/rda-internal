@@ -8,6 +8,7 @@ from rda.quality.config import QualityConfig
 from rda.quality.contracts import Applicability, MeasurementRecord
 from rda.quality.execution_plan import PlanUnit
 from rda.quality.features import ALGORITHM_VERSION, compute_shared_features
+from rda.quality.visual_features import compute_visual_features
 
 
 _DELEGATED = {"joint_limit", "timestamp_validity", "video_stream_sync", "video_timestamp_alignment"}
@@ -24,8 +25,27 @@ def measure_unit(unit: PlanUnit, episode: EpisodeData, media: Any, config: Quali
                                  config.effective_config_hash, Applicability.UNKNOWN,
                                  {"planned_samples": 0, "attempted_samples": 0, "computed_samples": 0}, {},
                                  ({"reason": reason, "metric": unit.metric},))
-    features = compute_shared_features(episode, config)
-    source_failures = [kind for kind in ("action", "state") if features.numeric.get(kind, {}).get("status") in {"missing_source", "invalid_shape"}]
+    metric_config = next((item for item in config.quality["metrics"] if item["name"] == unit.metric), None)
+    if metric_config is None:
+        raise ValueError(f"metric {unit.metric!r} was not configured")
+    if unit.metric in {"visual_quality", "video_freeze"}:
+        if media is None:
+            return MeasurementRecord(unit.plan_unit_id, unit.metric, ALGORITHM_VERSION, config.effective_config_hash,
+                                     Applicability.UNKNOWN, {"planned_samples": 0, "attempted_samples": 0, "computed_samples": 0}, {},
+                                     ({"reason": "media_provider_missing"},))
+        sample_range = unit.sampling_range
+        interval = (float(sample_range.get("from_timestamp", getattr(media.ref, "from_timestamp", 0.0))), float(sample_range.get("to_timestamp", getattr(media.ref, "to_timestamp", 0.0))))
+        planned = int(sample_range.get("planned_samples", len(getattr(media, "target_times", ()))))
+        params = metric_config["parameters"]
+        visual = compute_visual_features(media, planned_samples=planned, interval=interval,
+                                         preprocess=params.get("preprocess", {"roi": "full"}),
+                                         low_change_threshold=float(params.get("low_change_threshold", 0.0)))
+        return MeasurementRecord(unit.plan_unit_id, unit.metric, ALGORITHM_VERSION, config.effective_config_hash,
+                                 Applicability.APPLICABLE if visual.coverage["computed_samples"] else Applicability.UNKNOWN,
+                                 visual.coverage, {"frames": visual.frames, "low_change_spans": visual.low_change_spans, "preprocess": visual.preprocess}, visual.failures)
+    features = compute_shared_features(episode, config, producer_binding=unit.input_references.get("robot_profile"))
+    needed = {"action_discontinuity", "idle_ratio"}
+    source_failures = [kind for kind in (("action",) if unit.metric in needed else ("state",)) if features.numeric.get(kind, {}).get("status") in {"missing_source", "invalid_shape"}]
     if source_failures:
         return MeasurementRecord(unit.plan_unit_id, unit.metric, ALGORITHM_VERSION,
                                  config.effective_config_hash, Applicability.UNKNOWN,

@@ -25,9 +25,13 @@ def _robot(representation="velocity"):
     }
 
 
+def _producer():
+    return {"status": "complete", "profile_id": "synthetic-arm", "revision": "test", "raw_sha256": "sha256:" + "a" * 64}
+
+
 def test_constant_nonzero_velocity_command_is_active_without_command_delta():
     episode = EpisodeData(0, 3, np.array([0., 1., 2.]), observation={"state": np.array([[0.], [1.], [2.]])}, action={"command": np.array([[2.], [2.], [2.]])})
-    features = compute_shared_features(episode, _config(_robot()))
+    features = compute_shared_features(episode, _config(_robot()), producer_binding=_producer())
     assert features.numeric["action"]["dimensions"]["0"]["activity_count"] == 3
     assert features.numeric["action"]["dimensions"]["0"]["delta"]["p95"] == 0.0
     assert features.numeric["state"]["dimensions"]["0"]["derivative"]["unit"] == "rad/s"
@@ -45,7 +49,7 @@ def test_periodic_delta_requires_declared_period_and_degenerate_mad_keeps_spike_
     robot = _robot("absolute_position")
     robot["periodic_dimensions"] = [{"index": 0, "period": 360.0}]
     episode = EpisodeData(0, 4, np.arange(4.0), observation={"state": np.zeros((4, 1))}, action={"command": np.array([[359.], [1.], [1.], [1.]])})
-    features = compute_shared_features(episode, _config(robot))
+    features = compute_shared_features(episode, _config(robot), producer_binding=_producer())
     dimension = features.numeric["action"]["dimensions"]["0"]
     assert dimension["delta"]["values"] == [2.0, 0.0, 0.0]
     assert dimension["delta"]["mad_status"] == "mad_degenerate"
