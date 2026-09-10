@@ -144,3 +144,14 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=. /tmp/rda-quality-venv/bin/python -
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=. /tmp/rda-quality-venv/bin/python -m pytest -q
 230 passed, 6 skipped in 0.69s
 ```
+
+## Review minor follow-up
+
+`iter_quality_episode_batches` now translates an out-of-scope episode lookup
+into `QualityInputError(code="unknown_episode")`; the v1 schema explicitly
+states that affine `clock_mapping.scale` is strictly positive.
+
+```
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=. /tmp/rda-quality-venv/bin/python -m pytest tests/test_quality_input_manifest.py tests/test_quality_v30_boundaries.py tests/test_quality_media_pts.py -q
+25 passed in 0.25s
+```

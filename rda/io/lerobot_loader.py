@@ -282,7 +282,10 @@ def iter_quality_episode_batches(
         raise ValueError("batch_size must be a positive integer")
     required_identity = ["episode_index", "timestamp", "frame_index", "index", "task_index"]
     projected = list(dict.fromkeys([*columns, *required_identity]))
-    episode = manifest.episodes[episode_id]
+    try:
+        episode = manifest.episodes[episode_id]
+    except KeyError:
+        raise QualityInputError("unknown_episode", f"episode {episode_id} is outside the verified scope") from None
     for segment in iter_episode_segments(manifest, episode_id):
         source = manifest.sources[segment.relative_path]
         verify_source(source)

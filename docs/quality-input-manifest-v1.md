@@ -106,6 +106,7 @@ Each camera `media` entry is:
 }
 ```
 
+`clock_mapping.scale` must be finite and strictly greater than zero.
 `overlap_disposition` is optional unless two episodes overlap on the same
 path, stream, and feature key, when both entries must use
 `"shared_source_bounded"`.  Version 1 authorizes H.264/MP4 only.  Media
