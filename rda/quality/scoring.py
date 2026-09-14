@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
 from typing import Any, Mapping, Iterable
 
@@ -44,12 +45,18 @@ def _stats(ref: Any, metric: str):
 
 def score_measurements(records: Iterable[MeasurementRecord], reference: QualityReference | Mapping[str, Any], groups: Mapping[str, Any] | None = None) -> tuple[ScoredMeasurement, ...]:
     """Score records only; no EpisodeData or legacy metric constructors are touched."""
+    if not isinstance(reference, QualityReference):
+        raise TypeError("quality scoring requires QualityReference")
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}", reference.calibration_hash):
+        raise ValueError("invalid calibration_hash")
+    if not reference.dimensions or not reference.metrics:
+        raise ValueError("reference dimensions and metrics are required")
     out = []
     ref_count = getattr(reference, "sample_count", None)
     if ref_count is None and isinstance(reference, Mapping):
         ref_count = reference.get("sample_count", reference.get("n_calibration", 0))
     for record in records:
-        group = (groups or {}).get(record.plan_unit_id, groups or {}) if isinstance(groups, Mapping) else {}
+        group = (groups or {}).get(record.plan_unit_id, {}) if isinstance(groups, Mapping) else {}
         value = _extract(record.values)
         reasons: list[str] = []
         if record.applicability.value != "APPLICABLE": reasons.append("APPLICABILITY_UNKNOWN")
@@ -62,12 +69,12 @@ def score_measurements(records: Iterable[MeasurementRecord], reference: QualityR
         applicability = getattr(reference, "applicability", None)
         if isinstance(applicability, Mapping) and applicability:
             for key, expected in applicability.items():
-                if key in group and group.get(key) != expected:
+                if key not in group or group.get(key) != expected:
                     reasons.append("REFERENCE_SCOPE_MISMATCH")
                     break
         if stats is None: reasons.append("REFERENCE_GROUP_MISSING")
         elif ref_count is not None and ref_count < 2: reasons.append("INSUFFICIENT_REFERENCE_SAMPLES")
-        elif abs(float(stats.mad)) <= 1e-12 and abs(float(stats.iqr)) <= 1e-12: reasons.append("REFERENCE_DEGENERATE")
+        elif abs(float(stats.mad)) <= 1e-12: reasons.append("REFERENCE_DEGENERATE")
         score = None
         if not reasons:
             score = float((float(value) - float(stats.median)) / max(abs(float(stats.mad)), 1e-12))

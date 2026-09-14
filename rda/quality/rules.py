@@ -39,7 +39,14 @@ def _value(record: MeasurementRecord, path: str | None):
 def evaluate_measurement(record: MeasurementRecord, rule: Any, context: RuleContext | None = None) -> UnitResult:
     """Evaluate one completed measurement without consulting episode data."""
     if context is None:
-        context = RuleContext(str(_get(rule, "rule_id", "unknown")), _get(rule, "rule_version"), _get(rule, "applicable_scope"), _get(rule, "threshold")) if rule else RuleContext("none", None)
+        # Accept the standard quality config spelling as a compatibility
+        # adapter (version/scope/thresholds and nested calibration).
+        calibration = _get(rule, "calibration", {}) or {}
+        context = RuleContext(str(_get(rule, "rule_id", _get(rule, "name", "unknown"))),
+                              _get(rule, "rule_version", _get(rule, "version")),
+                              _get(rule, "applicable_scope", _get(rule, "scope")),
+                              _get(rule, "threshold", _get(rule, "thresholds")),
+                              _get(rule, "calibration_id", _get(calibration, "calibration_id"))) if rule else RuleContext("none", None)
     base = dict(record.coverage)
     base.setdefault("sampling_complete", base.get("planned_samples", 0) == base.get("attempted_samples", -1) == base.get("computed_samples", -2) and base.get("planned_samples", 0) > 0)
     if record.applicability is not Applicability.APPLICABLE:
