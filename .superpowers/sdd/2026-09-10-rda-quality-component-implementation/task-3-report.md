@@ -163,3 +163,12 @@ Discrete and absolute-position activity facts include transition/run evidence,
 and metric dispatch uses the registry disposition API.
 
 Focused verification: 11 passed in 0.10s.
+
+## Fix round 3/5 denominator correction
+
+Absolute-position activity is now represented as an n-frame mask (first frame
+explicitly idle, subsequent frames based on configured epsilon), so activity
+counts/runs align with the idle-ratio denominator and remain bounded for
+single-frame episodes.
+
+Focused regression: `tests/test_quality_measurements.py` — 6 passed in 0.07s.
