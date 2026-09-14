@@ -1,5 +1,6 @@
-from rda.quality.coverage import fixed_grid_coverage
+from rda.quality.coverage import fixed_grid_coverage, GridConfig
 def test_fixed_grid_requires_explicit_bounds_and_uses_same_grid():
     assert fixed_grid_coverage([(0,)], None).status=="UNASSESSED"
     x=fixed_grid_coverage([(0.1,), (0.9,)], {"bounds":[(0,1)],"bins":[2],"units":["m"],"frame":"base"})
     assert x.total_bins==2 and x.occupancy_ratio==1.0
+    assert fixed_grid_coverage([(0.1,)], GridConfig(((0,1),), (2,), ("m",), "base")).grid_hash

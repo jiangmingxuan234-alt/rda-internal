@@ -18,8 +18,10 @@ class CoverageResult:
 class GridConfig:
     bounds: tuple[tuple[float, float], ...]
     bins: tuple[int, ...]
+    units: tuple[str, ...] | None = None
+    frame: str | None = None
     def as_mapping(self) -> dict[str, Any]:
-        return {"bounds": self.bounds, "bins": self.bins}
+        return {"bounds": self.bounds, "bins": self.bins, "units": self.units, "frame": self.frame}
     @property
     def grid_hash(self):
         return hashlib.sha256(json.dumps(self.as_mapping(), sort_keys=True, default=list).encode()).hexdigest()
