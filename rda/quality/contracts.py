@@ -263,12 +263,14 @@ class UnitResult:
         }
 
 
-_CALIBRATED_SOURCE_FIELDS = {
+_REQUIRED_CALIBRATED_SOURCE_FIELDS = {
     "kind",
     "rule_id",
     "rule_version",
     "calibration_id",
     "calibration_hash",
+}
+_CALIBRATED_SOURCE_FIELDS = _REQUIRED_CALIBRATED_SOURCE_FIELDS | {
     # Optional Task1 source identity fields used by quality mode.
     "profile_revision", "profile_content_hash", "mapping_version", "mapping_hash",
     "task", "camera", "dimensions", "units",
@@ -307,7 +309,7 @@ def _validate_calibrated_rule_source(
     rule_id: str | None,
     rule_version: str | None,
 ) -> None:
-    missing = sorted(_CALIBRATED_SOURCE_FIELDS - set(source))
+    missing = sorted(_REQUIRED_CALIBRATED_SOURCE_FIELDS - set(source))
     unknown = sorted(set(source) - _CALIBRATED_SOURCE_FIELDS)
     if missing or unknown:
         raise ValueError(
