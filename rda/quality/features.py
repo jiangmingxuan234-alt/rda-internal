@@ -137,8 +137,11 @@ def compute_shared_features(episode: EpisodeData, config: QualityConfig, *, prod
                         entry["activity_count"] = int(np.count_nonzero(mask))
                         entry["activity_runs"] = _runs(mask)
                         entry["idle_count"] = int(mask.size - np.count_nonzero(mask))
-                    else:
+                    elif semantic == "BOUND" and dimension_representation == "absolute_position":
                         entry["activity_count"] = int(np.count_nonzero(np.abs(np.diff(values)) > 0))
+                        entry["activity_runs"] = _runs(np.abs(np.diff(values)) > 0)
+                    else:
+                        entry["activity_status"] = "UNASSESSED"
                 if kind == "state":
                     if semantic == "BOUND" and valid_time:
                         state_delta = np.diff(values)
@@ -147,7 +150,8 @@ def compute_shared_features(episode: EpisodeData, config: QualityConfig, *, prod
                         derivative = state_delta / np.diff(timestamps)
                         unit = str(semantics.get("unit", "unknown")) + "/s"
                         acceleration = np.diff(derivative) / np.diff(timestamps)[1:] if len(derivative) >= 2 else np.array([])
-                        entry["derivative"] = _stat(derivative) | {"values": [float(value) for value in derivative], "locations": [int(value) for value in range(len(derivative))], "unit": unit, "difference": "wrapped_first_difference" if dimension_period is not None else "first_difference", "smoothing": "none", "status": "ok", "acceleration": _stat(acceleration) | {"values": [float(value) for value in acceleration], "locations": [int(value + 1) for value in range(len(acceleration))], "unit": unit + "/s"}}
+                        derivative_fact = _stat(derivative) | {"values": [float(value) for value in derivative], "locations": [int(value) for value in range(len(derivative))], "unit": unit, "difference": "wrapped_first_difference" if dimension_period is not None else "first_difference", "smoothing": "none", "status": "ok" if np.all(np.isfinite(derivative)) else "nonfinite_sample", "acceleration": _stat(acceleration) | {"values": [float(value) for value in acceleration], "locations": [int(value + 1) for value in range(len(acceleration))], "unit": unit + "/s"}}
+                        entry["derivative"] = derivative_fact
                     else:
                         entry["derivative"] = {"status": "UNASSESSED" if semantic == "UNKNOWN" else "invalid_timestamps"}
             dimensions[str(index)] = entry

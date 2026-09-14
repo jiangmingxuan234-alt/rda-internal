@@ -9,6 +9,7 @@ from rda.quality.contracts import Applicability, MeasurementRecord
 from rda.quality.execution_plan import PlanUnit
 from rda.quality.features import ALGORITHM_VERSION, compute_shared_features
 from rda.quality.visual_features import compute_visual_features
+from rda.quality.registry import metric_spec, validate_parameters
 
 
 _DELEGATED = {"joint_limit", "timestamp_validity", "video_stream_sync", "video_timestamp_alignment"}
@@ -17,15 +18,17 @@ _DEFERRED = {"temporal_sufficiency", "sensor_synchronization"}
 
 def measure_unit(unit: PlanUnit, episode: EpisodeData, media: Any, config: QualityConfig) -> MeasurementRecord:
     """Measure only ``unit.metric``; this never selects a default metric set."""
+    spec = metric_spec(unit.metric)
     if unit.effective_config_hash != config.effective_config_hash:
         raise ValueError("plan unit effective config does not match measurement config")
-    if unit.metric in _DELEGATED | _DEFERRED:
-        reason = "delegated_to_robovet" if unit.metric in _DELEGATED else "provider_not_available"
+    metric_config = next((item for item in config.quality["metrics"] if item["name"] == unit.metric), None)
+    params = validate_parameters(unit.metric, metric_config["parameters"] if metric_config else {})
+    if spec.disposition in {"delegated", "deferred"}:
+        reason = "delegated_to_robovet" if spec.disposition == "delegated" else "provider_not_available"
         return MeasurementRecord(unit.plan_unit_id, unit.metric, ALGORITHM_VERSION,
                                  config.effective_config_hash, Applicability.UNKNOWN,
                                  {"planned_samples": 0, "attempted_samples": 0, "computed_samples": 0}, {},
                                  ({"reason": reason, "metric": unit.metric},))
-    metric_config = next((item for item in config.quality["metrics"] if item["name"] == unit.metric), None)
     if metric_config is None:
         raise ValueError(f"metric {unit.metric!r} was not configured")
     if unit.metric in {"visual_quality", "video_freeze"}:
@@ -36,7 +39,6 @@ def measure_unit(unit: PlanUnit, episode: EpisodeData, media: Any, config: Quali
         sample_range = unit.sampling_range
         interval = (float(sample_range.get("from_timestamp", getattr(media.ref, "from_timestamp", 0.0))), float(sample_range.get("to_timestamp", getattr(media.ref, "to_timestamp", 0.0))))
         planned = int(sample_range.get("planned_samples", len(getattr(media, "target_times", ()))))
-        params = metric_config["parameters"]
         visual = compute_visual_features(media, planned_samples=planned, interval=interval,
                                          preprocess=params.get("preprocess", {"roi": "full"}),
                                          low_change_threshold=float(params.get("low_change_threshold", 0.0)))
