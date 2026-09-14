@@ -23,6 +23,8 @@ def _get(rule: Any, name: str, default=None):
 
 def _value(record: MeasurementRecord, path: str | None):
     cur: Any = record.values
+    if path is None:
+        path = {"idle_ratio": "activity.idle_ratio", "sampling_jitter": "timestamps.jitter", "action_discontinuity": "action_deltas.value"}.get(record.metric_name)
     if path:
         for p in path.split("."):
             if isinstance(cur, Mapping) and p in cur:
@@ -72,7 +74,7 @@ def evaluate_measurement(record: MeasurementRecord, rule: Any, context: RuleCont
     if kind in {"calibrated", "calibrated_rule"}:
         source = dict(_get(rule, "rule_source", {}) or {})
         source.setdefault("kind", "calibrated_rule"); source.setdefault("rule_id", rule_id); source.setdefault("rule_version", version); source.setdefault("calibration_id", context.calibration_id or _get(rule, "calibration_id"))
-        source.setdefault("calibration_hash", _get(rule, "calibration_hash", ""))
+        source.setdefault("calibration_hash", _get(rule, "calibration_hash", _get(_get(rule, "calibration", {}) or {}, "calibration_hash", "")))
         if not version or not source.get("calibration_id") or not source.get("calibration_hash"):
             return UnitResult(record.plan_unit_id, record.applicability, ExecutionState.COMPUTED, Assessment.UNASSESSED, base, record.values, record.evidence, ("CALIBRATION_PROVENANCE_MISSING",), rule_id, version, source)
         # Task1 identity fields, when declared by the rule, must be complete.
