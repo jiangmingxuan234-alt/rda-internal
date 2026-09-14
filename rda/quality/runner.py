@@ -1,7 +1,7 @@
 """Bounded, resumable quality-mode execution."""
 from dataclasses import dataclass
 from pathlib import Path
-import json
+import json, hashlib
 from .checkpoint import CheckpointStore
 from .resources import ResourceBudget, BudgetGuard, BudgetExceeded
 from .contracts import QualityRunState
@@ -16,19 +16,29 @@ def run_quality(request, *, plan=None, execute_unit=None, budget=None):
     out=Path(request.output_root); staging=out/(request.run_id+'.staging'); staging.mkdir(parents=True,exist_ok=True)
     store=CheckpointStore(staging, request.run_id); cached=store.load(request.run_id)
     units=list(plan or request.config.get('execution_plan', [])); results=[]; reasons=[]; failed=skipped=0
-    for unit in units:
+    plan_hash='sha256:'+hashlib.sha256(json.dumps(units,sort_keys=True,default=str).encode()).hexdigest()
+    config_hash='sha256:'+hashlib.sha256(json.dumps(request.config,sort_keys=True,default=str).encode()).hexdigest()
+    prior=store.state()
+    if request.resume and prior and (prior.get('plan_hash') != plan_hash or prior.get('config_hash') != config_hash):
+        cached={}; reasons.append('RESUME_BINDING_MISMATCH')
+    stopped=False
+    for index, unit in enumerate(units):
         pid=unit.get('plan_unit_id') if isinstance(unit,dict) else getattr(unit,'plan_unit_id')
         if request.resume and pid in cached: results.append(cached[pid]); continue
         try:
             guard.check(); result=execute_unit(unit) if execute_unit else (unit if isinstance(unit,dict) else unit.to_dict())
             store.save_unit(result); results.append(result)
         except BudgetExceeded as exc:
-            reasons.append(exc.reason); skipped += 1; break
+            reasons.append(exc.reason); stopped=True
+            for rest in units[index:]:
+                rid = rest.get('plan_unit_id') if isinstance(rest,dict) else getattr(rest,'plan_unit_id')
+                row={'plan_unit_id':rid,'execution_state':'SKIPPED','reason_codes':[exc.reason]}; store.save_unit(row); results.append(row); skipped += 1
+            break
         except Exception as exc:
             failed += 1; reasons.append('UNIT_FAILED'); row={'plan_unit_id':pid,'execution_state':'FAILED','reason_codes':['UNIT_FAILED']}; store.save_unit(row); results.append(row)
     if skipped or failed: state=QualityRunState.PARTIAL
     else: state=QualityRunState.COMPLETED
-    store.mark_stage('publish', run_state=state.value, planned=len(units), completed=len(results))
+    store.mark_stage('publish', run_state=state.value, planned=len(units), completed=len(results), plan_hash=plan_hash, config_hash=config_hash)
     marker=out/(request.run_id+'.complete')
     if state is QualityRunState.COMPLETED:
         marker.write_text('complete\n')
