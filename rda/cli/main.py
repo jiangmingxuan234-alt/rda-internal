@@ -137,6 +137,12 @@ def capabilities(output_format: str) -> None:
     default=False,
     help="Run in offline mode and disable network-backed integrations.",
 )
+@click.option("--mode", type=click.Choice(["legacy", "quality"]), default="legacy", show_default=True)
+@click.option("--config", "quality_config", type=click.Path(exists=True, dir_okay=False, path_type=Path), default=None,
+              help="Versioned quality-mode JSON configuration.")
+@click.option("--input-manifest", type=click.Path(exists=True, dir_okay=False, path_type=Path), default=None)
+@click.option("--run-dir", type=click.Path(file_okay=False, path_type=Path), default=None)
+@click.option("--resume", is_flag=True, default=False, help="Resume a quality-mode run.")
 def audit(
     path: Path,
     output: Optional[Path],
@@ -147,6 +153,11 @@ def audit(
     blind: bool,
     metrics: Optional[str],
     offline: bool,
+    mode: str,
+    quality_config: Optional[Path],
+    input_manifest: Optional[Path],
+    run_dir: Optional[Path],
+    resume: bool,
 ) -> None:
     """Audit a LeRobot dataset at the given PATH.
 
@@ -160,6 +171,23 @@ def audit(
       rda audit ./my_dataset --platform so101 -v
       rda audit ./my_dataset --blind  # anonymized report for external sharing
     """
+    if mode == "quality":
+        if quality_config is None or input_manifest is None or run_dir is None:
+            raise click.UsageError("quality mode requires --config, --input-manifest, and --run-dir")
+        try:
+            import json as _json
+            from rda.quality.config import QualityConfig
+            from rda.quality.contracts import QualityRequest
+            from rda.quality.runner import run_quality
+            cfg = QualityConfig.from_mapping(_json.loads(quality_config.read_text(encoding="utf-8")))
+            run_id = cfg.effective_config_hash.split(":", 1)[-1][:16]
+            req = QualityRequest(path, input_manifest, cfg.effective_config, run_dir, run_id, resume=resume)
+            summary = run_quality(req)
+            click.echo(_json.dumps(summary.to_dict(), sort_keys=True))
+        except Exception as exc:
+            raise click.ClickException(f"quality audit failed: {exc}") from exc
+        return
+
     from rda.audit.dataset_audit import DatasetAuditor
     from rda.audit.episode_audit import EpisodeAuditor, resolve_metrics
     from rda.report.json_report import save_json_report
