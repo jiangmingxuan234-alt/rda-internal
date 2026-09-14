@@ -11,7 +11,9 @@ class GroupedSummary:
         for key, value in other.groups.items():
             dst = self.groups.setdefault(key, {"episode_ids": set(), "episode_count": 0, "duration_sec": 0.0, "_episode_durations": {}, "status_counts": defaultdict(int), "dimension_ranges": {}})
             dst["episode_ids"].update(value.get("episode_ids", set()))
-            dst["duration_sec"] = max(dst.get("duration_sec", 0.0), value.get("duration_sec", 0.0)) if dst["episode_ids"] else value.get("duration_sec", 0.0)
+            for ep, duration in value.get("_episode_durations", {}).items():
+                dst["_episode_durations"][ep] = max(float(duration), dst["_episode_durations"].get(ep, 0.0))
+            dst["duration_sec"] = sum(dst["_episode_durations"].values())
             for state, count in value.get("status_counts", {}).items(): dst["status_counts"][state] += count
             for dim, bounds in value.get("dimension_ranges", {}).items():
                 old = dst["dimension_ranges"].get(dim)
@@ -39,7 +41,8 @@ def summarize_measurements(records: Iterable[Any], identities: Mapping[str, Mapp
         dst["episode_ids"].add(ep); dst["episode_count"] = len(dst["episode_ids"])
         dst["status_counts"][record.applicability.value] += 1
         value = record.values.get("duration_sec") if isinstance(record.values, Mapping) else None
-        if isinstance(value, (int, float)): dst["_episode_durations"][ep] = max(float(value), dst["_episode_durations"].get(ep, 0.0))
+        if isinstance(value, (int, float)):
+            dst["_episode_durations"][ep] = max(float(value), dst["_episode_durations"].get(ep, 0.0))
             dst["duration_sec"] = sum(dst["_episode_durations"].values())
     return result
 
