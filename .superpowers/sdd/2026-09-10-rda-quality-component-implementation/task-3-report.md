@@ -119,3 +119,26 @@ Final full-suite verification after binding integration:
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=. /tmp/rda-quality-venv/bin/python -m pytest -q
 289 passed, 6 skipped in 0.77s
 ```
+
+## Fix round 2
+
+Integrated binding/registry APIs without modifying their owned files. Dispatch now
+uses `metric_spec` and `validate_parameters` as the single disposition source,
+metric-local values are selected, and unsupported torque/force/unbound activity
+claims are explicitly UNASSESSED. Nonfinite derivative facts retain finite and
+missing counts and cannot be reported as successful derivatives. Bound activity
+runs are emitted for absolute position as well as velocity/delta representations.
+
+Focused verification:
+
+```text
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=. /tmp/rda-quality-venv/bin/python -m pytest tests/test_quality_measurements.py tests/test_quality_motion_semantics.py tests/test_quality_visual_measurements.py tests/test_quality_config.py tests/test_quality_semantic_binding.py -q
+54 passed in 0.13s
+```
+
+Final full-suite verification after fix round 2:
+
+```text
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=. /tmp/rda-quality-venv/bin/python -m pytest -q
+289 passed, 6 skipped in 1.08s
+```
