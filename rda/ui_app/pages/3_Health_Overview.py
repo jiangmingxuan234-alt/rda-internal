@@ -130,15 +130,15 @@ with col_left:
     st.write("")
     st.write("")
 
-    # Dimension progress bars
+    # Dimension progress bars with descriptions
     st.markdown(f"**{t('health_dims_header')}**")
     dim_labels = [
-        (t("health_dim_integrity"), dims["integrity"], 0.4),
-        (t("health_dim_temporal"), dims["temporal"], 0.2),
-        (t("health_dim_motion"), dims["motion"], 0.2),
-        (t("health_dim_consistency"), dims["consistency"], 0.2),
+        (t("health_dim_integrity"), dims["integrity"], 0.4, t("health_dim_integrity_desc")),
+        (t("health_dim_temporal"), dims["temporal"], 0.2, t("health_dim_temporal_desc")),
+        (t("health_dim_motion"), dims["motion"], 0.2, t("health_dim_motion_desc")),
+        (t("health_dim_consistency"), dims["consistency"], 0.2, t("health_dim_consistency_desc")),
     ]
-    for name, score, weight in dim_labels:
+    for name, score, weight, desc in dim_labels:
         cols = st.columns([2, 3, 1])
         with cols[0]:
             st.caption(name)
@@ -146,6 +146,7 @@ with col_left:
             st.progress(score / 100.0)
         with cols[2]:
             st.caption(f"**{score:.0f}** / 100")
+        st.caption(f"<span style='color:#6b7280;font-size:12px;'>{desc}</span>", unsafe_allow_html=True)
 
 with col_right:
     st.subheader(t("health_radar_header"))

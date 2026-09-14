@@ -125,12 +125,14 @@ STRINGS: Dict[str, Dict[str, str]] = {
         "audit_summary_line": "**共 {eps} 个 episodes · {frames} 帧**",
         "audit_layers_header": "已启用的审计检查层",
         "audit_layers_info": (
-            "审计流程包含以下检查层，全部默认启用：\n\n"
-            "**Layer 1A · 完整性检查** — 缺失帧、NaN/Inf、时间戳、格式一致性等确定性检查\n\n"
-            "**Layer 1B · 行为质量检测** — 基于参考分布的统计异常检测（运动、时序、分布等）\n\n"
-            "**Layer 2 · 诊断与归因** — Pattern Type 识别 + 原因分析 + 建议"
+            "审计流程包含以下三层，全部默认启用：\n\n"
+            "**Integrity Gate（完整性门禁）** — 缺失帧、NaN/Inf、格式一致性、时间戳有效性、关节限位、"
+            "视频冻结、视频时间戳对齐、多摄像头存在性等确定性检查\n\n"
+            "**Trajectory Diagnostics（轨迹诊断）** — 传感器同步、采样抖动、速度/加速度异常、"
+            "动作不连续性、空闲比例、视觉质量等统计异常检测\n\n"
+            "**Dataset Profile（数据集画像）** — 轨迹分布、状态空间覆盖率、时间结构等数据集级统计"
         ),
-        "audit_layers_note": "V0.1 暂不支持 Layer 3 数据治理功能；审计时默认启用所有检查层。",
+        "audit_layers_note": "所有检查层默认启用；视觉质量（visual_quality）为可选指标，需通过 --video-quality 开启。",
         "audit_done_info": "✅ 已完成审计，共 {eps} 个 episodes",
         "audit_rerun_btn": "🔄 重新运行审计",
         "audit_view_health": "查看健康概览 →",
@@ -163,6 +165,10 @@ STRINGS: Dict[str, Dict[str, str]] = {
         "health_dim_temporal": "时间质量 (Temporal)",
         "health_dim_motion": "运动质量 (Motion)",
         "health_dim_consistency": "行为一致性 (Consistency)",
+        "health_dim_integrity_desc": "基于 Integrity Gate 全部 9 项关键指标的通过情况：缺失帧、NaN/Inf、格式一致性、时间戳有效性、关节限位、视频冻结、视频时间戳对齐、多摄像头存在性、视频帧完整性",
+        "health_dim_temporal_desc": "基于时间戳有效性通过率（70%）+ 帧率稳定性（30%，由时间间隔变异系数推算）",
+        "health_dim_motion_desc": "基于有效运动比例（50%，来自 idle_ratio）+ 动作平滑度（50%，来自 action_discontinuity 的 spike 数量）",
+        "health_dim_consistency_desc": "基于审计判定分布：PASS 集全分、REVIEW 集半分、EXCLUDE 集不得分",
         "health_radar_header": "雷达图",
         "health_top_issues_header": "🔎 主要审计观察",
         "health_no_issues": "🎉 未发现确定性结构问题或明显风险信号",
@@ -680,15 +686,17 @@ STRINGS: Dict[str, Dict[str, str]] = {
         "audit_summary_line": "**{eps} episodes · {frames} frames**",
         "audit_layers_header": "Enabled audit layers",
         "audit_layers_info": (
-            "The audit pipeline includes the following layers, all enabled by default:\n\n"
-            "**Layer 1A · Integrity checks** — missing frames, NaN/Inf, timestamps, "
-            "schema consistency and other deterministic checks\n\n"
-            "**Layer 1B · Behavioral quality** — reference-distribution-based statistical "
-            "anomaly detection (motion, temporal, distribution)\n\n"
-            "**Layer 2 · Diagnosis & attribution** — Pattern Type identification + "
-            "root-cause analysis + suggestions"
+            "The audit pipeline includes three layers, all enabled by default:\n\n"
+            "**Integrity Gate** — deterministic checks: missing frames, NaN/Inf, schema "
+            "consistency, timestamp validity, joint limits, video freeze, video-timestamp "
+            "alignment, multi-camera presence\n\n"
+            "**Trajectory Diagnostics** — statistical anomaly detection: sensor sync, "
+            "sampling jitter, velocity/acceleration, action discontinuity, idle ratio, "
+            "visual quality\n\n"
+            "**Dataset Profile** — dataset-level statistics: trajectory distribution, "
+            "state-space coverage, temporal structure"
         ),
-        "audit_layers_note": "V0.1 does not yet include Layer 3 data governance; all check layers are enabled by default.",
+        "audit_layers_note": "All layers are enabled by default; visual_quality is opt-in, enable with --video-quality.",
         "audit_done_info": "✅ Audit completed — {eps} episodes",
         "audit_rerun_btn": "🔄 Re-run audit",
         "audit_view_health": "View health overview →",
@@ -721,6 +729,10 @@ STRINGS: Dict[str, Dict[str, str]] = {
         "health_dim_temporal": "Temporal",
         "health_dim_motion": "Motion",
         "health_dim_consistency": "Consistency",
+        "health_dim_integrity_desc": "Based on all 9 Integrity Gate metrics: missing frames, NaN/Inf, schema consistency, timestamp validity, joint limits, video freeze, video-timestamp alignment, multi-camera presence, frame integrity",
+        "health_dim_temporal_desc": "Based on timestamp validity pass rate (70%) + FPS stability (30%, derived from frame-interval coefficient of variation)",
+        "health_dim_motion_desc": "Based on effective motion ratio (50%, from idle_ratio) + motion smoothness (50%, from action_discontinuity spike count)",
+        "health_dim_consistency_desc": "Based on verdict distribution: PASS = full score, REVIEW = half score, EXCLUDE = zero score",
         "health_radar_header": "Radar chart",
         "health_top_issues_header": "🔎 Top Audit Observations",
         "health_no_issues": "🎉 No deterministic failures or elevated risk signals found",

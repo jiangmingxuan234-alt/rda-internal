@@ -222,14 +222,6 @@ def format_enhanced_summary_text(result: DatasetAuditResult) -> str:
             f"  {'velocity_acceleration':28s} ✓ Measured  median velocity p95 = {median_v:.4f}"
         )
 
-    # Idle ratio (L2 diagnostic in v0.9)
-    idle = temporal.get("idle_ratio", {})
-    if idle:
-        idle_med = idle.get("idle_ratio", {}).get("median", 0.0)
-        lines.append(
-            f"  {'idle_ratio':28s} ✓ Measured  median = {idle_med:.1%}"
-        )
-
     # Visual quality
     vq = temporal.get("visual_quality", {})
     if vq:
@@ -242,6 +234,14 @@ def format_enhanced_summary_text(result: DatasetAuditResult) -> str:
     # ── Dataset Profile (L3) ──
     lines.append("  ── Dataset Profile ──")
     utility = dataset_metrics.get("dataset_utility", {})
+
+    # Idle ratio (aggregated in dataset_utility)
+    idle = utility.get("idle_ratio", {})
+    if idle:
+        idle_med = idle.get("idle_ratio", {}).get("median", 0.0)
+        lines.append(
+            f"  {'idle_ratio':28s} ✓ Measured  median = {idle_med:.1%}"
+        )
 
     # State-space occupancy (aggregation key is "coverage")
     sso = utility.get("coverage", {})
