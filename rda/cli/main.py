@@ -711,6 +711,190 @@ def recommend(
             click.echo(f"Report saved to: {output}")
 
 
+
+# ---------------------------------------------------------------------------
+# feedback subcommand
+# ---------------------------------------------------------------------------
+
+_FEEDBACK_URL = (
+    "https://github.com/liesliy/rda/issues/new"
+    "?template=real-world-feedback.yml"
+)
+_BUG_URL = (
+    "https://github.com/liesliy/rda/issues/new"
+    "?template=bug-report.yml"
+)
+_FEATURE_URL = (
+    "https://github.com/liesliy/rda/issues/new"
+    "?template=feature-request.yml"
+)
+_DISCUSSION_URL = "https://github.com/liesliy/rda/discussions"
+
+
+def _open_url(url: str) -> bool:
+    """Try to open *url* in the user's default browser. Return True on success."""
+    import webbrowser
+    try:
+        return webbrowser.open(url)
+    except Exception:
+        return False
+
+
+@cli.command(
+    "feedback",
+    short_help="Submit feedback, report a bug, or request a feature.",
+)
+@click.option(
+    "--show",
+    "show_report",
+    is_flag=True,
+    default=False,
+    help=(
+        "Print a compact summary of the most recent audit report so you "
+        "can copy-paste it into the feedback form."
+    ),
+)
+@click.option(
+    "--bug",
+    "open_bug",
+    is_flag=True,
+    default=False,
+    help="Open the bug report template in your browser.",
+)
+@click.option(
+    "--idea",
+    "open_idea",
+    is_flag=True,
+    default=False,
+    help="Open the feature request template in your browser.",
+)
+@click.option(
+    "--report",
+    "report_path",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=None,
+    help=(
+        "Path to a specific audit report JSON to summarise. "
+        "Defaults to ./rda_report.json."
+    ),
+)
+def feedback(
+    show_report: bool,
+    open_bug: bool,
+    open_idea: bool,
+    report_path: Optional[Path],
+) -> None:
+    """Submit feedback, report a bug, or request a feature.
+
+    \b
+    Without flags, opens the real-world feedback form in your browser.
+    Use --bug for bug reports, --idea for feature requests.
+    Use --show to print a summary of your last audit report so you can
+    paste it into the GitHub issue.
+
+    \b
+    Examples:
+      rda feedback            # open feedback form
+      rda feedback --bug      # open bug report template
+      rda feedback --idea     # open feature request template
+      rda feedback --show     # print last audit summary for feedback
+      rda feedback --show --report path/to/report.json
+    """
+    # --- Open a specific template ------------------------------------------
+    if open_bug:
+        ok = _open_url(_BUG_URL)
+        if ok:
+            click.echo(f"Opening bug report template: {_BUG_URL}")
+        else:
+            click.echo(f"Please open this URL manually:\n  {_BUG_URL}")
+        return
+
+    if open_idea:
+        ok = _open_url(_FEATURE_URL)
+        if ok:
+            click.echo(f"Opening feature request template: {_FEATURE_URL}")
+        else:
+            click.echo(f"Please open this URL manually:\n  {_FEATURE_URL}")
+        return
+
+    # --- Show audit summary for feedback -----------------------------------
+    if show_report:
+        import json as _json
+
+        rp = report_path or Path.cwd() / "rda_report.json"
+        if not rp.exists():
+            click.echo(f"Error: Report not found: {rp}", err=True)
+            click.echo(
+                "  Run 'rda audit' first, or specify --report PATH.",
+                err=True,
+            )
+            sys.exit(1)
+
+        try:
+            data = _json.loads(rp.read_text(encoding="utf-8"))
+        except Exception as e:
+            click.echo(f"Error: Cannot read report: {e}", err=True)
+            sys.exit(1)
+
+        _print_feedback_summary(data)
+
+        click.echo()
+        click.echo("─" * 60)
+        click.echo("📝  Copy the above into the feedback form:")
+
+    # --- Open the general feedback form ------------------------------------
+    ok = _open_url(_FEEDBACK_URL)
+    if ok:
+        click.echo(f"\nOpening feedback form: {_FEEDBACK_URL}")
+    else:
+        click.echo(f"\nPlease open this URL manually:\n  {_FEEDBACK_URL}")
+
+    click.echo()
+    click.echo("💬  Other ways to share feedback:")
+    click.echo(f"  • GitHub Discussions: {_DISCUSSION_URL}")
+    click.echo("  • PyPI: https://pypi.org/project/robot-data-audit/")
+
+
+def _print_feedback_summary(data: dict) -> None:
+    """Print a compact, copy-pasteable audit summary."""
+    import json as _json
+
+    tool_version = data.get("tool_version", "unknown")
+    dataset_path = data.get("dataset_path", "unknown")
+    num_episodes = data.get("summary", {}).get("total_episodes", "?")
+    total_frames = data.get("summary", {}).get("total_frames", "?")
+
+    verdicts = data.get("summary", {}).get("verdict_counts", {})
+    v_pass = verdicts.get("PASS", 0)
+    v_review = verdicts.get("REVIEW", 0)
+    v_exclude = verdicts.get("EXCLUDE", 0)
+
+    acc = data.get("summary", {}).get("acceptance_summary", {})
+    p50 = acc.get("p50_baseline", {})
+
+    click.echo("📋 RDA Audit Summary (copy-paste ready)")
+    click.echo("=" * 50)
+    click.echo(f"RDA version:  {tool_version}")
+    click.echo(f"Dataset:      {dataset_path}")
+    click.echo(f"Episodes:     {num_episodes}")
+    click.echo(f"Total frames: {total_frames}")
+    click.echo(f"Verdicts:     PASS={v_pass}  REVIEW={v_review}  EXCLUDE={v_exclude}")
+
+    if p50:
+        click.echo("\nP50 baselines:")
+        for key, val in p50.items():
+            if isinstance(val, float):
+                click.echo(f"  {key}: {val:.4f}")
+            elif isinstance(val, (int, str)):
+                click.echo(f"  {key}: {val}")
+
+    skipped = data.get("skipped_by_missing_dep", {})
+    if skipped:
+        deps = ", ".join(f"{n} metric(s) skipped (missing '{dep}')"
+                         for dep, n in sorted(skipped.items()))
+        click.echo(f"\nSkipped:      {deps}")
+    click.echo("=" * 50)
+
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------

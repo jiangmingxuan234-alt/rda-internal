@@ -4,6 +4,7 @@
 [![Python](https://img.shields.io/pypi/pyversions/robot-data-audit)](https://pypi.org/project/robot-data-audit/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Downloads](https://static.pepy.tech/badge/robot-data-audit)](https://pepy.tech/project/robot-data-audit)
+[![Downloads/month](https://static.pepy.tech/badge/robot-data-audit/month)](https://pepy.tech/project/robot-data-audit)
 [![Tests](https://github.com/liesliy/rda/actions/workflows/ci.yml/badge.svg)](https://github.com/liesliy/rda/actions/workflows/ci.yml)
 
 [![audit: lerobot/pusht](https://raw.githubusercontent.com/liesliy/rda/main/docs/examples/rda_badge_pusht.svg)](https://liesliy.github.io/rda/examples/rda_report_pusht.html) [![audit: AgiBotWorld2026 RL](https://raw.githubusercontent.com/liesliy/rda/main/docs/examples/rda_badge_agibot_rl.svg)](https://liesliy.github.io/rda/examples/rda_report_agibot_rl_hgdagger.html)
@@ -17,6 +18,18 @@ RDA 审计机器人操作数据集（LeRobot 格式），对每一集给出三�
 或发布 benchmark 之前做一次独立检查。
 
 **当前版本：v0.9.2** —— `pip install robot-data-audit`。
+
+## ⭐ 支持 RDA
+
+如果 RDA 帮你的机器人数据更靠谱，**给仓库点个 Star** —— 一键就能做到，也是帮我们成长最直接的方式。
+
+<a href="https://github.com/liesliy/rda" target="_blank">
+  <img src="https://img.shields.io/github/stars/liesliy/rda?style=social" alt="在 GitHub 上 Star RDA">
+</a>
+
+每个 Star 都在告诉我们方向没走偏。Bug 报告、功能建议和真实使用反馈就更有价值了——
+点击[反馈表](https://github.com/liesliy/rda/issues/new?template=real-world-feedback.yml)
+或运行 `rda feedback` 提交。
 
 ## 四层审计架构
 

@@ -4,6 +4,7 @@
 [![Python](https://img.shields.io/pypi/pyversions/robot-data-audit)](https://pypi.org/project/robot-data-audit/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Downloads](https://static.pepy.tech/badge/robot-data-audit)](https://pepy.tech/project/robot-data-audit)
+[![Downloads/month](https://static.pepy.tech/badge/robot-data-audit/month)](https://pepy.tech/project/robot-data-audit)
 [![Tests](https://github.com/liesliy/rda/actions/workflows/ci.yml/badge.svg)](https://github.com/liesliy/rda/actions/workflows/ci.yml)
 
 [![audit: lerobot/pusht](https://raw.githubusercontent.com/liesliy/rda/main/docs/examples/rda_badge_pusht.svg)](https://liesliy.github.io/rda/examples/rda_report_pusht.html) [![audit: AgiBotWorld2026 RL](https://raw.githubusercontent.com/liesliy/rda/main/docs/examples/rda_badge_agibot_rl.svg)](https://liesliy.github.io/rda/examples/rda_report_agibot_rl_hgdagger.html)
@@ -18,6 +19,20 @@ measured diagnostics. Use it as an independent check before you accept a
 vendor dataset, train a policy, or publish a benchmark.
 
 **Current release: v0.9.2** — `pip install robot-data-audit`.
+
+## ⭐ Support RDA
+
+If RDA helps you ship better robot data, **star the repo** — it takes one click
+and is the single best way to help us grow.
+
+<a href="https://github.com/liesliy/rda" target="_blank">
+  <img src="https://img.shields.io/github/stars/liesliy/rda?style=social" alt="Star RDA on GitHub">
+</a>
+
+Every star tells us we're on the right track. Bug reports, feature requests and
+real-world feedback are even better — see the
+[feedback form](https://github.com/liesliy/rda/issues/new?template=real-world-feedback.yml)
+or run `rda feedback` to submit one.
 
 ## The four-layer audit
 

@@ -1,0 +1,76 @@
+name: Bug Report
+description: Report a bug or incorrect behavior in RDA.
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please fill in the details below so we can reproduce and fix it quickly.
+
+  - type: input
+    id: rda-version
+    attributes:
+      label: RDA version
+      description: Run `rda --version` and paste the result.
+      placeholder: "0.9.2"
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Python version, OS, and install method.
+      placeholder: "Python 3.11, Ubuntu 22.04, pip install robot-data-audit"
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Provide the exact commands or code that trigger the bug.
+      placeholder: |
+        1. rda audit /path/to/dataset
+        2. See error: ...
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What actually happened? Include the full error message if any.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: dataset-info
+    attributes:
+      label: Dataset info (optional)
+      description: |
+        If the bug is dataset-specific, describe the dataset format (v2.1 or v3.0),
+        robot type, number of episodes, and whether the dataset is public.
+        **Do NOT upload raw data or proprietary information.**
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Any other information that might help us debug (screenshots, logs, etc.).
+    validations:
+      required: false
