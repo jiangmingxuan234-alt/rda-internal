@@ -99,10 +99,25 @@ def generate_json_report(result: DatasetAuditResult) -> Dict[str, Any]:
     # Import tool version
     from rda import __version__ as _rda_version
 
+    # D-17 (v0.9.4): execution tier metadata
+    execution_tier = getattr(result, "execution_tier", None)
+    video_quality_executed = getattr(result, "video_quality_executed", False)
+
+    video_quality_section = {}
+    if execution_tier is not None:
+        video_quality_section = {
+            "execution_tier": execution_tier,
+            "video_quality_executed": video_quality_executed,
+            "video_quality_note": (
+                "Visual quality analysis included" if video_quality_executed
+                else "Visual quality analysis skipped (Fast Audit mode). Use --video-quality or --full to enable."
+            ),
+        }
+
     report = {
         # Report SCHEMA version (layout of this JSON document), NOT the tool
         # version — bump when the report structure itself changes.
-        "report_schema_version": "1.1",
+        "report_schema_version": "1.2",
         "tool_version": _rda_version,
         "dataset": {
             "path": result.dataset_info.path,
@@ -124,6 +139,8 @@ def generate_json_report(result: DatasetAuditResult) -> Dict[str, Any]:
             "layer2_temporal_motion": dataset_metrics.get("temporal_motion", {}),
             "layer3_dataset_utility": dataset_metrics.get("dataset_utility", {}),
         },
+        # D-17 (v0.9.4): execution tier and video quality metadata
+        "video_quality": video_quality_section,
         # v0.9: Dataset Summary — aggregated statistics across all episodes
         "dataset_summary": (
             result.dataset_summary.to_dict().get("dataset_summary", {})

@@ -39,6 +39,7 @@ from rda.audit.rules import (
 )
 from rda.io.schema import EpisodeData
 from rda.metrics.base import MetricAvailability, MetricBase, MetricResult
+from rda.audit.execution_tier import ExecutionTier, get_tier_config, filter_metrics_by_tier
 
 
 # Mapping from portable metric name to the corresponding audit metric name
@@ -107,6 +108,7 @@ class EpisodeAuditor:
         self,
         metrics: Sequence[MetricBase] | None = None,
         scorer: object | None = None,
+        execution_tier: object | None = None,
     ) -> None:
         """Initialize the episode auditor.
 
@@ -116,12 +118,24 @@ class EpisodeAuditor:
             scorer: Optional BehavioralScorer instance for reference-based
                 deviation scoring. The type is ``object`` to avoid a
                 hard import dependency on the calibration module.
+            execution_tier: Execution tier for filtering metrics (v0.9.4).
+                When provided, metrics are filtered according to the tier.
         """
+        self.execution_tier = execution_tier
         if metrics is None:
             from rda.metrics import ALL_METRICS
 
-            metrics = [cls() for cls in ALL_METRICS]
-        self.metrics: List[MetricBase] = list(metrics)
+            metric_classes = list(ALL_METRICS)
+        else:
+            metric_classes = [type(m) for m in metrics]
+
+        # Filter metrics by execution tier (D-17)
+        if execution_tier is not None:
+            all_names = {cls.name for cls in metric_classes}
+            allowed_names = filter_metrics_by_tier(all_names, execution_tier)
+            metric_classes = [cls for cls in metric_classes if cls.name in allowed_names]
+
+        self.metrics: List[MetricBase] = [cls() for cls in metric_classes]
         self.scorer = scorer
 
     def audit(self, episode: EpisodeData) -> EpisodeAuditResult:

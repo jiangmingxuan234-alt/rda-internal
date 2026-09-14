@@ -11,6 +11,7 @@ from rda.io.schema import DatasetInfo
 
 if TYPE_CHECKING:
     from rda.report.dataset_summary import DatasetSummaryResult
+    from rda.audit.execution_tier import ExecutionTier
 
 
 @dataclass
@@ -22,12 +23,16 @@ class DatasetAuditResult:
         episodes: Mapping from episode index to EpisodeAuditResult.
         verdict_counts: Summary count of each verdict across all episodes.
         dataset_summary: Aggregated dataset-level summary statistics (v0.9).
+        execution_tier: The execution tier used for this audit (v0.9.4).
+        video_quality_executed: Whether visual quality was executed (v0.9.4).
     """
 
     dataset_info: DatasetInfo
     episodes: Dict[int, EpisodeAuditResult] = field(default_factory=dict)
     verdict_counts: Dict[AuditVerdict, int] = field(default_factory=dict)
     dataset_summary: Optional[DatasetSummaryResult] = None
+    execution_tier: Optional[str] = None
+    video_quality_executed: bool = False
 
     @property
     def num_episodes(self) -> int:
@@ -69,12 +74,14 @@ class DatasetAuditor:
             When provided and no ``episode_auditor`` is given, a
             :class:`~rda.calibration.BehavioralScorer` is automatically
             created and passed to the EpisodeAuditor.
+        execution_tier: Execution tier controlling which metrics to run (v0.9.4).
     """
 
     def __init__(
         self,
         episode_auditor: Optional[EpisodeAuditor] = None,
         reference: Optional[ReferenceProfile] = None,
+        execution_tier: Optional[Any] = None,
     ) -> None:
         """Initialize the dataset auditor.
 
@@ -84,15 +91,17 @@ class DatasetAuditor:
             reference: Optional ReferenceProfile for behavioral scoring.
                 When provided and episode_auditor is None, a BehavioralScorer
                 is automatically created and injected into the EpisodeAuditor.
+            execution_tier: Execution tier for filtering metrics (v0.9.4).
         """
+        self.execution_tier = execution_tier
         if episode_auditor is not None:
             self.episode_auditor = episode_auditor
         elif reference is not None:
             from rda.calibration.scorer import BehavioralScorer
             scorer = BehavioralScorer(reference)
-            self.episode_auditor = EpisodeAuditor(scorer=scorer)
+            self.episode_auditor = EpisodeAuditor(scorer=scorer, execution_tier=execution_tier)
         else:
-            self.episode_auditor = EpisodeAuditor()
+            self.episode_auditor = EpisodeAuditor(execution_tier=execution_tier)
 
     def audit_dataset(
         self,
