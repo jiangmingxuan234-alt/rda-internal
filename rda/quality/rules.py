@@ -42,6 +42,9 @@ def evaluate_measurement(record: MeasurementRecord, rule: Any, context: RuleCont
         # Accept the standard quality config spelling as a compatibility
         # adapter (version/scope/thresholds and nested calibration).
         calibration = _get(rule, "calibration", {}) or {}
+        status = _get(rule, "calibration_status", "")
+        calibration = _get(rule, "calibration", {}) or {}
+        inferred_kind = "calibrated_rule" if status == "calibrated" else "provisional"
         context = RuleContext(str(_get(rule, "rule_id", _get(rule, "name", "unknown"))),
                               _get(rule, "rule_version", _get(rule, "version")),
                               _get(rule, "applicable_scope", _get(rule, "scope")),
@@ -57,8 +60,12 @@ def evaluate_measurement(record: MeasurementRecord, rule: Any, context: RuleCont
     scope = _get(rule, "applicable_scope", None)
     if scope is not None and (context.applicable_scope is None or dict(scope) != dict(context.applicable_scope)):
         return UnitResult(record.plan_unit_id, record.applicability, ExecutionState.COMPUTED, Assessment.UNASSESSED, base, record.values, record.evidence, ("RULE_SCOPE_MISMATCH",), rule_id, version)
-    kind = _get(rule, "kind", _get(rule, "type", "provisional"))
+    kind = _get(rule, "kind", _get(rule, "type", "calibrated_rule" if _get(rule, "calibration_status") == "calibrated" else "provisional"))
     threshold = context.threshold if context.threshold is not None else _get(rule, "threshold", None)
+    if isinstance(threshold, Mapping) and "value" not in threshold and len(threshold) == 1:
+        threshold = next(iter(threshold.values()))
+    if threshold is None:
+        return UnitResult(record.plan_unit_id, record.applicability, ExecutionState.COMPUTED, Assessment.UNASSESSED, base, record.values, record.evidence, ("THRESHOLD_MISSING",), rule_id, version)
     val = _value(record, _get(rule, "path", None))
     if val is None:
         return UnitResult(record.plan_unit_id, record.applicability, ExecutionState.COMPUTED, Assessment.UNASSESSED, base, record.values, record.evidence, ("MEASUREMENT_VALUE_MISSING",), rule_id, version)
@@ -72,7 +79,7 @@ def evaluate_measurement(record: MeasurementRecord, rule: Any, context: RuleCont
         declared = ("profile_revision", "profile_content_hash", "mapping_version", "mapping_hash", "task", "camera", "dimensions", "units")
         if any(k in source for k in declared) and any(not source.get(k) for k in declared):
             return UnitResult(record.plan_unit_id, record.applicability, ExecutionState.COMPUTED, Assessment.UNASSESSED, base, record.values, record.evidence, ("CALIBRATION_PROVENANCE_MISMATCH",), rule_id, version, source)
-        if not base.get("sampling_complete") or base.get("computed_samples", 0) <= 0:
+        if base.get("planned_samples") != base.get("attempted_samples") or base.get("attempted_samples") != base.get("computed_samples") or base.get("computed_samples", 0) <= 0:
             return UnitResult(record.plan_unit_id, record.applicability, ExecutionState.COMPUTED, Assessment.UNASSESSED, base, record.values, record.evidence, ("INCOMPLETE_COVERAGE",), rule_id, version, source)
     op_name = _get(rule, "operator", "gt")
     target = threshold.get("value") if isinstance(threshold, Mapping) else threshold
@@ -81,5 +88,5 @@ def evaluate_measurement(record: MeasurementRecord, rule: Any, context: RuleCont
         assessment, reasons = Assessment.REVIEW, ("PROVISIONAL_RULE", "PROVISIONAL_SOURCE")
     else:
         assessment, reasons = (Assessment.EXCLUDE_CANDIDATE, ("CALIBRATED_RULE_MATCH",)) if passed else (Assessment.PASS, ("CALIBRATED_RULE_CLEAR",))
-    finding = {"measurement": val, "threshold": threshold, "rule_id": rule_id, "rule_version": version, "evidence_level": "computed", "locator": _get(rule, "locator", None)}
+    finding = {"measurement": val, "threshold": threshold, "rule_id": rule_id, "rule_version": version, "calibration_id": context.calibration_id, "calibration_hash": source.get("calibration_hash") if kind in {"calibrated", "calibrated_rule"} else None, "evidence_level": "computed", "locator": _get(rule, "locator", None)}
     return UnitResult(record.plan_unit_id, record.applicability, ExecutionState.COMPUTED, assessment, base, record.values, tuple(record.evidence) + (finding,), reasons, rule_id, version, source if kind in {"calibrated", "calibrated_rule"} else {"kind": "provisional", "rule_id": rule_id, "rule_version": version})

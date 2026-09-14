@@ -8,6 +8,7 @@ deviation scores for incoming episodes.
 from __future__ import annotations
 
 import json
+import re, math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Mapping, Any
@@ -264,5 +265,12 @@ class QualityReference:
         for name in ("calibration_id", "calibration_hash", "source_revision", "source_profile_hash", "calculation_version"):
             if not isinstance(getattr(self, name), str) or not getattr(self, name).strip():
                 raise ValueError(f"{name} must be non-empty")
+        if not re.fullmatch(r"sha256:[0-9a-f]{64}", self.calibration_hash):
+            raise ValueError("calibration_hash must be sha256")
         if self.sample_count <= 0:
             raise ValueError("sample_count must be positive")
+        if not isinstance(self.dimensions, Mapping) or not self.dimensions or not isinstance(self.metrics, Mapping) or not self.metrics:
+            raise ValueError("dimensions and metrics are required")
+        for stats in self.metrics.values():
+            if not isinstance(stats, MetricStats) or any(not math.isfinite(float(x)) for x in (stats.median, stats.mad, stats.p05, stats.p25, stats.p75, stats.p95)):
+                raise ValueError("invalid metric statistics")
