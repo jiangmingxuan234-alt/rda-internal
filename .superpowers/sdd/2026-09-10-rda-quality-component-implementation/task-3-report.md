@@ -152,3 +152,14 @@ partial timestamp interval that no bounded window provider supplied.
 Focused regression: `tests/test_quality_measurements.py` — 5 passed in 0.07s.
 The real H264 decode-to-measurement test remains a runner-level integration
 responsibility because this unit receives an already bounded Task 2 provider.
+
+## Fix round 3/5
+
+Nonfinite derivative and acceleration values are serialized as null with finite,
+missing and location metadata; measurement dispatch returns UNKNOWN partial
+coverage for nonfinite facts or missing semantic binding. Registry-validated
+`activity_epsilon` and `smoothing` are now consumed by feature calculations.
+Discrete and absolute-position activity facts include transition/run evidence,
+and metric dispatch uses the registry disposition API.
+
+Focused verification: 11 passed in 0.10s.
