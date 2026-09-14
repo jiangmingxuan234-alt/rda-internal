@@ -1,6 +1,7 @@
 """Fixed-grid observational coverage; never a reachability verdict."""
 from __future__ import annotations
 import math
+import hashlib, json
 from dataclasses import dataclass
 from typing import Iterable, Mapping, Any
 
@@ -19,12 +20,17 @@ class GridConfig:
     bins: tuple[int, ...]
     def as_mapping(self) -> dict[str, Any]:
         return {"bounds": self.bounds, "bins": self.bins}
+    @property
+    def grid_hash(self):
+        return hashlib.sha256(json.dumps(self.as_mapping(), sort_keys=True, default=list).encode()).hexdigest()
 
 def fixed_grid_coverage(points: Iterable[Iterable[float]], config: Mapping[str, Any] | None) -> CoverageResult:
     if isinstance(config, GridConfig):
         config = config.as_mapping()
     if not config: return CoverageResult("UNASSESSED", 0, 0, None, ("FIXED_GRID_NOT_CONFIGURED",))
     bounds, bins = config.get("bounds"), config.get("bins")
+    if config.get("units") is None or config.get("frame") is None:
+        return CoverageResult("UNASSESSED", 0, 0, None, ("GRID_SEMANTICS_MISSING",))
     if not isinstance(bounds, (list, tuple)) or not isinstance(bins, (list, tuple)) or len(bounds) != len(bins) or not bounds:
         return CoverageResult("UNASSESSED", 0, 0, None, ("FIXED_GRID_INVALID",))
     total = 1
@@ -40,4 +46,5 @@ def fixed_grid_coverage(points: Iterable[Iterable[float]], config: Mapping[str, 
             idx.append(min(n-1, int((x-lo)/(hi-lo)*n)))
         else: occupied.add(tuple(idx))
     reasons = ("POINTS_OUT_OF_BOUNDS",) if out_of_bounds else ()
-    return CoverageResult("ASSESSED", len(occupied), total, len(occupied)/total, reasons)
+    gh = hashlib.sha256(json.dumps(config, sort_keys=True, default=list).encode()).hexdigest()
+    return CoverageResult("ASSESSED", len(occupied), total, len(occupied)/total, reasons, gh)
