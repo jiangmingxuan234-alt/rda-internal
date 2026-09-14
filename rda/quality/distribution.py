@@ -9,7 +9,7 @@ class GroupedSummary:
     groups: dict[tuple, dict[str, Any]] = field(default_factory=dict)
     def merge(self, other: "GroupedSummary") -> "GroupedSummary":
         for key, value in other.groups.items():
-            dst = self.groups.setdefault(key, {"episode_ids": set(), "episode_count": 0, "duration_sec": 0.0, "status_counts": defaultdict(int), "dimension_ranges": {}})
+            dst = self.groups.setdefault(key, {"episode_ids": set(), "episode_count": 0, "duration_sec": 0.0, "_episode_durations": {}, "status_counts": defaultdict(int), "dimension_ranges": {}})
             dst["episode_ids"].update(value.get("episode_ids", set()))
             dst["duration_sec"] = max(dst.get("duration_sec", 0.0), value.get("duration_sec", 0.0)) if dst["episode_ids"] else value.get("duration_sec", 0.0)
             for state, count in value.get("status_counts", {}).items(): dst["status_counts"][state] += count
@@ -33,13 +33,14 @@ def summarize_measurements(records: Iterable[Any], identities: Mapping[str, Mapp
     result = GroupedSummary(); identities = identities or {}
     for record in records:
         ident = identities.get(record.plan_unit_id, {})
-        key = tuple((k, ident.get(k, "unknown")) for k in ("dataset", "episode_id", "task", "camera", "dimension_group", "metric_name", "algorithm_version", "effective_config_hash"))
-        dst = result.groups.setdefault(key, {"episode_ids": set(), "episode_count": 0, "duration_sec": 0.0, "status_counts": defaultdict(int), "dimension_ranges": {}})
+        key = tuple((k, ident.get(k, "unknown")) for k in ("dataset", "episode_id", "task", "camera", "dimension_group", "source", "metric_name", "algorithm_version", "effective_config_hash"))
+        dst = result.groups.setdefault(key, {"episode_ids": set(), "episode_count": 0, "duration_sec": 0.0, "_episode_durations": {}, "status_counts": defaultdict(int), "dimension_ranges": {}})
         ep = ident.get("episode_id", record.plan_unit_id)
         dst["episode_ids"].add(ep); dst["episode_count"] = len(dst["episode_ids"])
         dst["status_counts"][record.applicability.value] += 1
         value = record.values.get("duration_sec") if isinstance(record.values, Mapping) else None
-        if isinstance(value, (int, float)): dst["duration_sec"] += float(value)
+        if isinstance(value, (int, float)): dst["_episode_durations"][ep] = max(float(value), dst["_episode_durations"].get(ep, 0.0))
+            dst["duration_sec"] = sum(dst["_episode_durations"].values())
     return result
 
 def merge_grouped_summaries(parts: Iterable[GroupedSummary]) -> GroupedSummary:
