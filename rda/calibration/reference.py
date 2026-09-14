@@ -12,6 +12,7 @@ import re, math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Mapping, Any
+from rda.quality.contracts import freeze_json
 
 
 @dataclass
@@ -267,10 +268,14 @@ class QualityReference:
                 raise ValueError(f"{name} must be non-empty")
         if not re.fullmatch(r"sha256:[0-9a-f]{64}", self.calibration_hash):
             raise ValueError("calibration_hash must be sha256")
+        if not re.fullmatch(r"sha256:[0-9a-f]{64}", self.source_profile_hash):
+            raise ValueError("source_profile_hash must be sha256")
         if self.sample_count <= 0:
             raise ValueError("sample_count must be positive")
         if not isinstance(self.dimensions, Mapping) or not self.dimensions or not isinstance(self.metrics, Mapping) or not self.metrics:
             raise ValueError("dimensions and metrics are required")
+        object.__setattr__(self, "dimensions", freeze_json(self.dimensions, path="dimensions"))
+        object.__setattr__(self, "applicability", freeze_json(self.applicability, path="applicability"))
         for stats in self.metrics.values():
             if not isinstance(stats, MetricStats) or any(not math.isfinite(float(x)) for x in (stats.median, stats.mad, stats.p05, stats.p25, stats.p75, stats.p95)):
                 raise ValueError("invalid metric statistics")

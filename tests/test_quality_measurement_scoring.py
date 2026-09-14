@@ -9,3 +9,9 @@ def test_degenerate_mad_and_strict_reference():
     out=score_measurements((rec,),ref,{"u":{"robot":"r"}})
     assert "REFERENCE_DEGENERATE" in out[0].reason_codes and out[0].score is None
     with pytest.raises(TypeError): score_measurements((rec,), {"metrics":{}}, {})
+
+def test_reference_profile_hash_is_strict_and_mappings_frozen():
+    with pytest.raises(ValueError):
+        QualityReference("c", "sha256:"+"b"*64, "r", "bad", "v", {"d":"x"}, 2, {}, {"m":MetricStats(1,1,0,0,2,2)})
+    ref = QualityReference("c", "sha256:"+"b"*64, "r", "sha256:"+"c"*64, "v", {"d":"x"}, 2, {}, {"m":MetricStats(1,1,0,0,2,2)})
+    with pytest.raises(TypeError): ref.dimensions["x"] = 1
