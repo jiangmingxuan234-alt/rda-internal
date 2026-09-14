@@ -140,6 +140,8 @@ def capabilities(output_format: str) -> None:
 @click.option("--mode", type=click.Choice(["legacy", "quality"]), default="legacy", show_default=True)
 @click.option("--config", "quality_config", type=click.Path(exists=True, dir_okay=False, path_type=Path), default=None,
               help="Versioned quality-mode JSON configuration.")
+@click.option("--task-profile", type=click.Path(exists=True, dir_okay=False, path_type=Path), default=None,
+              help="Optional task-specific quality profile merged into --config.")
 @click.option("--input-manifest", type=click.Path(exists=True, dir_okay=False, path_type=Path), default=None)
 @click.option("--run-dir", type=click.Path(file_okay=False, path_type=Path), default=None)
 @click.option("--resume", is_flag=True, default=False, help="Resume a quality-mode run.")
@@ -155,6 +157,7 @@ def audit(
     offline: bool,
     mode: str,
     quality_config: Optional[Path],
+    task_profile: Optional[Path],
     input_manifest: Optional[Path],
     run_dir: Optional[Path],
     resume: bool,
@@ -179,7 +182,12 @@ def audit(
             from rda.quality.config import QualityConfig
             from rda.quality.contracts import QualityRequest
             from rda.quality.runner import run_quality
-            cfg = QualityConfig.from_mapping(_json.loads(quality_config.read_text(encoding="utf-8")))
+            config_mapping = _json.loads(quality_config.read_text(encoding="utf-8"))
+            if task_profile is not None:
+                from rda.quality.task_profiles import merge_task_profile
+                task_mapping = _json.loads(task_profile.read_text(encoding="utf-8"))
+                config_mapping = merge_task_profile(config_mapping, task_mapping)
+            cfg = QualityConfig.from_mapping(config_mapping)
             run_id = cfg.effective_config_hash.split(":", 1)[-1][:16]
             req = QualityRequest(path, input_manifest, cfg.effective_config, run_dir, run_id, resume=resume)
             summary = run_quality(req)
