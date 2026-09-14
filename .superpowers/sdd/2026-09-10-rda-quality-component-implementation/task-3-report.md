@@ -142,3 +142,13 @@ Final full-suite verification after fix round 2:
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 PYTHONPATH=. /tmp/rda-quality-venv/bin/python -m pytest -q
 289 passed, 6 skipped in 1.08s
 ```
+
+## Fix round 3
+
+`measure_unit` now validates the plan unit episode identity and fails closed
+with `sampling_range_requires_window_provider` when a nonvisual unit requests a
+partial timestamp interval that no bounded window provider supplied.
+
+Focused regression: `tests/test_quality_measurements.py` — 5 passed in 0.07s.
+The real H264 decode-to-measurement test remains a runner-level integration
+responsibility because this unit receives an already bounded Task 2 provider.
