@@ -19,6 +19,8 @@ from rda.quality.execution_plan import (
 )
 from rda.quality.window_contract import TrainingWindow, WindowParityReport, compare_window_indices, load_training_windows
 from rda.quality.window_diagnostics import WindowDiagnostics, compute_window_diagnostics
+from rda.quality.evidence import EvidenceRecord, load_quality_advice, to_fiftyone_records
+from rda.quality.core_review import AppendOnlyReviewClient, ReviewEvent, new_review_event
 
 __all__ = [
     "Applicability",
@@ -47,6 +49,12 @@ __all__ = [
     "compare_window_indices",
     "load_training_windows",
     "compute_window_diagnostics",
+    "EvidenceRecord",
+    "load_quality_advice",
+    "to_fiftyone_records",
+    "AppendOnlyReviewClient",
+    "ReviewEvent",
+    "new_review_event",
     "GroupSummary",
     "summarize",
     "merge_summaries",
