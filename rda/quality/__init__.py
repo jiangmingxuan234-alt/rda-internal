@@ -47,6 +47,12 @@ __all__ = [
     "compare_window_indices",
     "load_training_windows",
     "compute_window_diagnostics",
+    "GroupSummary",
+    "summarize",
+    "merge_summaries",
+    "map_task",
+    "GridConfig",
+    "fixed_grid_coverage",
 ]
 
 
@@ -58,4 +64,10 @@ def __getattr__(name):
     if name in {"ScoredMeasurement", "score_measurements"}:
         from rda.quality.scoring import ScoredMeasurement, score_measurements
         return {"ScoredMeasurement": ScoredMeasurement, "score_measurements": score_measurements}[name]
+    if name in {"GroupSummary", "summarize", "merge_summaries", "map_task"}:
+        from rda.quality.distribution import GroupSummary, summarize, merge_summaries, map_task
+        return locals()[name]
+    if name in {"GridConfig", "fixed_grid_coverage"}:
+        from rda.quality.coverage import GridConfig, fixed_grid_coverage
+        return {"GridConfig": GridConfig, "fixed_grid_coverage": fixed_grid_coverage}[name]
     raise AttributeError(name)
