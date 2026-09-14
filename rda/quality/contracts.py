@@ -269,6 +269,9 @@ _CALIBRATED_SOURCE_FIELDS = {
     "rule_version",
     "calibration_id",
     "calibration_hash",
+    # Optional Task1 source identity fields used by quality mode.
+    "profile_revision", "profile_content_hash", "mapping_version", "mapping_hash",
+    "task", "camera", "dimensions", "units",
 }
 _SHA256_PATTERN = re.compile(r"sha256:[0-9a-f]{64}\Z")
 
