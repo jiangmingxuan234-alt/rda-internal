@@ -19,6 +19,8 @@ _DEFERRED = {"temporal_sufficiency", "sensor_synchronization"}
 def measure_unit(unit: PlanUnit, episode: EpisodeData, media: Any, config: QualityConfig) -> MeasurementRecord:
     """Measure only ``unit.metric``; this never selects a default metric set."""
     spec = metric_spec(unit.metric)
+    if str(episode.episode_index) != str(unit.episode_id):
+        raise ValueError("plan unit episode_id does not match episode")
     if unit.effective_config_hash != config.effective_config_hash:
         raise ValueError("plan unit effective config does not match measurement config")
     metric_config = next((item for item in config.quality["metrics"] if item["name"] == unit.metric), None)
@@ -31,6 +33,15 @@ def measure_unit(unit: PlanUnit, episode: EpisodeData, media: Any, config: Quali
                                  ({"reason": reason, "metric": unit.metric},))
     if metric_config is None:
         raise ValueError(f"metric {unit.metric!r} was not configured")
+    if unit.metric not in {"visual_quality", "video_freeze"}:
+        requested_from = unit.sampling_range.get("from_timestamp")
+        requested_to = unit.sampling_range.get("to_timestamp")
+        if requested_from is not None or requested_to is not None:
+            timestamps = getattr(episode, "timestamps", ())
+            if len(timestamps) == 0 or float(requested_from) != float(timestamps[0]) or float(requested_to) != float(timestamps[-1]):
+                return MeasurementRecord(unit.plan_unit_id, unit.metric, ALGORITHM_VERSION, config.effective_config_hash,
+                                         Applicability.UNKNOWN, {"planned_samples": 0, "attempted_samples": 0, "computed_samples": 0}, {},
+                                         ({"reason": "sampling_range_requires_window_provider"},))
     if unit.metric in {"visual_quality", "video_freeze"}:
         if media is None:
             return MeasurementRecord(unit.plan_unit_id, unit.metric, ALGORITHM_VERSION, config.effective_config_hash,

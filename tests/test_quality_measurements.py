@@ -72,3 +72,13 @@ def test_measurement_record_is_versioned_fact_and_delegated_metric_is_unassessed
     assert record.applicability == "UNKNOWN"
     assert record.values == {}
     assert record.evidence[0]["reason"] == "delegated_to_robovet"
+
+
+def test_measure_unit_fails_closed_for_episode_or_unprovided_sampling_window():
+    config = _config(_robot())
+    episode = EpisodeData(0, 2, np.array([0., 1.]), observation={"state": np.array([[0., 0.], [1., 0.]], dtype=np.float32)}, action={"action": np.array([[1., 0.], [1., 0.]], dtype=np.float32)})
+    spec = {"episode_id": "0", "metric": "action_discontinuity", "camera_or_dimension_group": "arm", "input_references": {"robot_profile": profile_facts()}, "requested_config_hash": config.requested_config_hash, "effective_config_hash": config.effective_config_hash, "sampling_range": {"from_timestamp": 0.2, "to_timestamp": 0.8}, "resource_estimate": {}}
+    unit = build_plan([spec]).units[0]
+    record = measure_unit(unit, episode, None, config)
+    assert record.applicability == "UNKNOWN"
+    assert record.evidence[0]["reason"] == "sampling_range_requires_window_provider"
