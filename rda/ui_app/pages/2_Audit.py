@@ -26,7 +26,7 @@ from components.common import (  # noqa: E402
 # Helper functions (moved to top for Streamlit compatibility)
 # ---------------------------------------------------------------------------
 
-def _run_audit() -> None:
+def _run_audit(execution_tier=None) -> None:
     """Run the audit with a progress bar."""
     from rda.audit.dataset_audit import DatasetAuditor, DatasetAuditResult
     from rda.io.lerobot_loader import iter_episodes
