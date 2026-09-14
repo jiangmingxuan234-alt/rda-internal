@@ -1,8 +1,8 @@
-# Benchmark: RDA on 13 Local Robot Datasets + Blind Test
+# Benchmark: RDA on 14 Local Robot Datasets + Blind Test
 
-**RDA version**: 0.5.8 · **Scope**: 5,094 episodes (observation) + 206 episodes (blind test) · **Last run**: 2026-09-04
+**RDA version**: 0.8.0 · **Scope**: 5,334 episodes (observation) + 206 episodes (blind test) · **Last run**: 2026-09-14
 
-We ran `rda audit` across 13 local LeRobot-format datasets — sim and real,
+We ran `rda audit` across 14 local LeRobot-format datasets — sim and real,
 scripted and human teleop, research arms and hobby hardware — with zero tuning
 per dataset. The same default thresholds, everywhere. This page is the
 reproducibility record; every figure below comes from saved RDA JSON reports.
@@ -23,6 +23,7 @@ The corrected rerun includes the LeRobot v3.0 loader fix released in 0.5.3.
 | libero (local copy) | sim / incomplete local copy | 1,693 | 213 / 707 / 773 | 6,276 (918 eps) | 73.7% (920 eps) |
 | pusht | sim | 206 | 43 / 163 / 0 | 1,148 (199 eps) | 81.7% |
 | svla_so101_pickplace | real SO-100 | 50 | 5 / 45 / 0 | 260 (50 eps) | 86.7% |
+| utokyo_pr2_tabletop_manipulation | sim (Gazebo PR2) / RLDS port | 240 | 18 / 222 / 0 | 681 (202 eps) | 83.6% |
 | xarm_lift_medium | real xArm | 800 | **767** / 33 / 0 | 6 (5 eps) | **20.8%** |
 | xarm_push_medium | real xArm | 800 | 238 / 562 / 0 | 845 (500 eps) | 83.3% |
 
@@ -40,6 +41,21 @@ Stretch-platform entry in the table. `panda_pick_place_can` was tried
 first per priority but skipped: the HF mirror now returns 401 (gated),
 same situation as aloha_sim_transfer_cube_human. Full row numbers come
 from the saved JSON report (rda_benchmark_auto/cmu_stretch_report.json).
+
+Addition note (2026-09-14, v0.8.0): `utokyo_pr2_tabletop_manipulation`
+(lerobot/utokyo_pr2_tabletop_manipulation, UTokyo PR2 tabletop manipulation
+in Gazebo, an RLDS / Open X-Embodiment port; 240 episodes, 32,708 frames,
+7-DoF state / 8-DoF action, three pick-and-fold tasks) was downloaded via
+hf-mirror.com and audited with default thresholds: 18/222/0, spikes in
+202/240 episodes, 83.6% median idle. Integrity layers were clean on all 240
+episodes; every REVIEW comes from the behavior/utility layer. Worth knowing:
+the action space is un-normalized RLDS raw (joint magnitudes in the
+hundreds, dims 4-6 constant at ±1.5708, dims 7-8 a binary gripper), so
+default spike thresholds fire on encoding properties, not corruption —
+normalize before training on it. First PR2-platform and first RLDS-port
+entry. `panda_pick_place_can` was tried first per priority and skipped
+again: 401 (gated). This is the first row audited with RDA 0.8.0
+(rda_benchmark_auto/utokyo_pr2_tabletop_manipulation_report.json).
 
 ## Blind test (2026-08-31, v0.5.4)
 
