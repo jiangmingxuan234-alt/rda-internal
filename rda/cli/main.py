@@ -38,6 +38,22 @@ def cli(ctx: click.Context) -> None:
         click.echo(ctx.get_help())
 
 
+@cli.command("capabilities", short_help="Report offline quality capabilities.")
+@click.option("--format", "output_format", type=click.Choice(["json", "text"], case_sensitive=False), default="text", show_default=True)
+def capabilities(output_format: str) -> None:
+    """Report available quality features without loading training libraries."""
+    from rda.quality.capabilities import collect_capabilities
+    data = collect_capabilities()
+    if output_format.lower() == "json":
+        import json
+        click.echo(json.dumps(data, ensure_ascii=False, sort_keys=True))
+        return
+    click.echo(f"rda-quality protocol v{data['protocol']['major']}")
+    for name, info in data["dependencies"].items():
+        state = "available" if info["available"] else "unavailable"
+        click.echo(f"{name}: {state}")
+
+
 # ---------------------------------------------------------------------------
 # audit subcommand
 # ---------------------------------------------------------------------------
