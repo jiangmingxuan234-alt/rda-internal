@@ -60,6 +60,28 @@ if st.session_state.audit_result is None:
     st.page_link("pages/2_Audit.py", label=t("go_audit"), icon="🔍")
     st.stop()
 
+# ---------------------------------------------------------------------------
+# Execution tier info banner
+# ---------------------------------------------------------------------------
+_result = st.session_state.audit_result
+_exec_tier = getattr(_result, "execution_tier", None)
+_vq_exec = getattr(_result, "video_quality_executed", False)
+_tier_labels = {
+    "fast": "Fast Audit",
+    "video_quality": "Video Quality",
+    "no_video": "No Video",
+    "video_only": "Video Only",
+    "full": "Full Audit",
+}
+_tier_label = _tier_labels.get(_exec_tier, "Fast Audit")
+if _vq_exec:
+    st.caption(f"{t('health_tier_label')}: **{_tier_label}** — {t('health_tier_note_included')}")
+else:
+    st.caption(f"{t('health_tier_label')}: **{_tier_label}** — {t('health_tier_note_skipped')}")
+
+# ---------------------------------------------------------------------------
+# Data loading
+# ---------------------------------------------------------------------------
 result = st.session_state.audit_result
 info = result.dataset_info
 

@@ -15,6 +15,7 @@ if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
 from rda.ui_app.i18n import get_lang, t  # noqa: E402
+from rda.audit.execution_tier import ExecutionTier  # noqa: E402
 
 from components.common import (  # noqa: E402
     build_episodes_dataframe,
@@ -37,7 +38,7 @@ def _run_audit() -> None:
 
     try:
         total = info.num_episodes
-        auditor = DatasetAuditor()
+        auditor = DatasetAuditor(execution_tier=execution_tier)
         result = DatasetAuditResult(dataset_info=info)
 
         status_text.text(t("audit_loading_data"))
@@ -55,6 +56,12 @@ def _run_audit() -> None:
 
         # Compute verdict distribution
         result.compute_verdict_counts()
+
+        # Store execution tier metadata
+        result.execution_tier = execution_tier.value if execution_tier else "fast"
+        result.video_quality_executed = execution_tier in (
+            ExecutionTier.VIDEO_QUALITY, ExecutionTier.VIDEO_ONLY, ExecutionTier.FULL
+        ) if execution_tier else False
 
         # Persist to session state
         st.session_state.audit_result = result
@@ -118,6 +125,33 @@ st.info(t("audit_layers_info"))
 st.caption(t("audit_layers_note"))
 
 # ---------------------------------------------------------------------------
+# Execution tier selector
+# ---------------------------------------------------------------------------
+st.divider()
+st.subheader(t("audit_tier_header"))
+
+tier_options = {
+    "fast": (ExecutionTier.FAST, t("audit_tier_fast"), t("audit_tier_fast_desc")),
+    "video_quality": (ExecutionTier.VIDEO_QUALITY, t("audit_tier_video_quality"), t("audit_tier_video_quality_desc")),
+    "no_video": (ExecutionTier.NO_VIDEO, t("audit_tier_no_video"), t("audit_tier_no_video_desc")),
+    "video_only": (ExecutionTier.VIDEO_ONLY, t("audit_tier_video_only"), t("audit_tier_video_only_desc")),
+    "full": (ExecutionTier.FULL, t("audit_tier_full"), t("audit_tier_full_desc")),
+}
+
+tier_keys = list(tier_options.keys())
+default_index = tier_keys.index("fast")
+
+selected_tier_key = st.radio(
+    t("audit_tier_help"),
+    options=tier_keys,
+    index=default_index,
+    format_func=lambda k: f"{tier_options[k][1]}  —  {tier_options[k][2]}",
+    horizontal=False,
+    label_visibility="collapsed",
+)
+st.session_state.selected_execution_tier = tier_options[selected_tier_key][0]
+
+# ---------------------------------------------------------------------------
 # Run audit
 # ---------------------------------------------------------------------------
 st.divider()
@@ -143,6 +177,20 @@ if st.session_state.audit_result is not None:
     result = st.session_state.audit_result
     counts = {v.value: c for v, c in result.verdict_counts.items()}
 
+    # Show execution tier info
+    _exec_tier = getattr(result, "execution_tier", None)
+    _vq_exec = getattr(result, "video_quality_executed", False)
+    tier_labels = {
+        "fast": t("audit_tier_fast"),
+        "video_quality": t("audit_tier_video_quality"),
+        "no_video": t("audit_tier_no_video"),
+        "video_only": t("audit_tier_video_only"),
+        "full": t("audit_tier_full"),
+    }
+    _tier_label = tier_labels.get(_exec_tier, t("audit_tier_fast"))
+    st.info(f"**{t('audit_tier_result_label')}**: {_tier_label}  |  "
+            f"{t('audit_tier_vq_included') if _vq_exec else t('audit_tier_vq_skipped')}")
+
     st.subheader(t("audit_result_header"))
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -158,7 +206,8 @@ if st.session_state.audit_result is not None:
 else:
     if st.button(t("audit_start_btn"), type="primary", disabled=st.session_state.audit_in_progress,
                  use_container_width=True):
-        _run_audit()
+        _tier = st.session_state.get("selected_execution_tier", ExecutionTier.FAST)
+        _run_audit(execution_tier=_tier)
 
 
 # ---------------------------------------------------------------------------

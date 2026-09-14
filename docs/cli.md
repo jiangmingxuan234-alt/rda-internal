@@ -11,8 +11,16 @@ rda audit [OPTIONS] PATH
 | `-o, --output FILE` | Save JSON report (default: `<path>/rda_report.json`) |
 | `--format [json\|text]` | Output format (default: `text`) |
 | `--platform TEXT` | Robot platform (e.g. `so101`, `droid`) for Tier 3 metrics |
+| `--video-quality` | Include visual quality analysis (default: Fast Audit skips it) |
+| `--no-video` | Skip all video-related metrics (9 metrics) |
+| `--video-only` | Run only video-related metrics |
+| `--full` | Full audit — all metrics including visual quality |
 | `-v, --verbose` | Verbose output |
 | `--blind` | Redact identifying paths for externally shareable reports |
+
+> **Execution Tiers (v0.9.4+):** By default RDA runs in **Fast Audit** mode, which
+> skips `visual_quality` (requires frame decoding). Use `--video-quality` or `--full`
+> to include it. The four flags above are mutually exclusive.
 
 ```bash
 # JSON to stdout
@@ -23,6 +31,15 @@ rda audit /path/to/dataset --blind --format json
 
 # Save report to custom path
 rda audit /path/to/dataset -o /tmp/my_report.json
+
+# Include visual quality analysis
+rda audit /path/to/dataset --video-quality
+
+# Full audit (all metrics including visual quality)
+rda audit /path/to/dataset --full
+
+# Skip all video metrics (fastest for non-video datasets)
+rda audit /path/to/dataset --no-video
 ```
 
 ## `rda recommend`
