@@ -82,3 +82,15 @@ def test_measure_unit_fails_closed_for_episode_or_unprovided_sampling_window():
     record = measure_unit(unit, episode, None, config)
     assert record.applicability == "UNKNOWN"
     assert record.evidence[0]["reason"] == "sampling_range_requires_window_provider"
+
+
+def test_absolute_position_activity_is_per_frame_and_idle_ratio_denominator_matches():
+    config = QualityConfig.from_mapping({"contract_version": 1, "quality": {"metrics": [{"name": "idle_ratio", "role": "informational", "parameters": {}}]}, "robot": _robot("absolute_position")})
+    episode = EpisodeData(0, 3, np.array([0., 1., 2.]), observation={"state": np.zeros((3, 2), dtype=np.float32)}, action={"action": np.array([[0., 0.], [0., 0.], [1., 0.]], dtype=np.float32)})
+    features = compute_shared_features(episode, config, producer_binding=profile_facts())
+    fact = features.numeric["action"]["dimensions"]["0"]
+    assert fact["activity_count"] == 1
+    assert fact["activity_runs"] == [{"start": 2, "end": 2, "length": 1}]
+    unit = build_plan([{"episode_id": "0", "metric": "idle_ratio", "camera_or_dimension_group": "arm", "input_references": {"robot_profile": profile_facts()}, "requested_config_hash": config.requested_config_hash, "effective_config_hash": config.effective_config_hash, "sampling_range": {}, "resource_estimate": {}}]).units[0]
+    record = measure_unit(unit, episode, None, config)
+    assert 0.0 <= record.values["activity"]["idle_ratio"] <= 1.0

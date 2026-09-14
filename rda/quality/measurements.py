@@ -65,6 +65,7 @@ def measure_unit(unit: PlanUnit, episode: EpisodeData, media: Any, config: Quali
                                  {"planned_samples": episode.num_frames, "attempted_samples": 0, "computed_samples": 0}, {},
                                  tuple({"reason": "source_unavailable", "source": kind} for kind in source_failures))
     values = {"numeric": features.numeric, "semantic_status": features.semantic_status}
+    nonfinite_fact = any(item.get("statistics", {}).get("missing_count", 0) for item in features.numeric.get("state", {}).get("dimensions", {}).values())
     if config.robot is None:
         coverage = {"planned_samples": episode.num_frames, "attempted_samples": episode.num_frames, "computed_samples": 0}
         return MeasurementRecord(unit.plan_unit_id, unit.metric, ALGORITHM_VERSION, config.effective_config_hash,
@@ -88,7 +89,6 @@ def measure_unit(unit: PlanUnit, episode: EpisodeData, media: Any, config: Quali
     elif unit.metric == "action_discontinuity":
         values = {"action_deltas": {index: item.get("delta", {}) for index, item in values["numeric"].get("action", {}).get("dimensions", {}).items()}}
     timestamp_error = features.numeric["timestamps"].get("status") != "ok"
-    nonfinite_fact = any(item.get("statistics", {}).get("missing_count", 0) for item in values["numeric"].get("state", {}).get("dimensions", {}).values())
     coverage = {"planned_samples": episode.num_frames, "attempted_samples": episode.num_frames,
                 "computed_samples": 0 if timestamp_error else episode.num_frames}
     if timestamp_error or nonfinite_fact or features.semantic_status != "BOUND":

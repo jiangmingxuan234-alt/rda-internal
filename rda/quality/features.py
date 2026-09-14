@@ -142,8 +142,9 @@ def compute_shared_features(episode: EpisodeData, config: QualityConfig, *, prod
                         entry["activity_runs"] = _runs(mask)
                         entry["idle_count"] = int(mask.size - np.count_nonzero(mask))
                     elif semantic == "BOUND" and dimension_representation == "absolute_position":
-                        entry["activity_count"] = int(np.count_nonzero(np.abs(np.diff(values)) > 0))
-                        entry["activity_runs"] = _runs(np.abs(np.diff(values)) > 0)
+                        mask = np.r_[False, np.abs(np.diff(values)) > float(parameters.get("activity_epsilon", 0.0))]
+                        entry["activity_count"] = int(np.count_nonzero(mask))
+                        entry["activity_runs"] = _runs(mask)
                     else:
                         entry["activity_status"] = "UNASSESSED"
                 if kind == "state":
