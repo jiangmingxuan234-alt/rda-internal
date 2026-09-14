@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import math
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterable, Iterator, Mapping
@@ -34,8 +35,10 @@ class TrainingWindow:
         dt = tuple(float(v) for v in self.delta_t)
         if len(dt) not in (0, len(self.observation_frames)):
             raise ValueError("delta_t must be empty or match observation_frames")
+        if any(not math.isfinite(v) for v in dt):
+            raise ValueError("delta_t must contain finite values")
         object.__setattr__(self, "delta_t", dt)
-        if self.camera_tolerance is not None and float(self.camera_tolerance) < 0:
+        if self.camera_tolerance is not None and (not math.isfinite(float(self.camera_tolerance)) or float(self.camera_tolerance) < 0):
             raise ValueError("camera_tolerance must be non-negative")
 
     @classmethod
