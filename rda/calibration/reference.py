@@ -12,7 +12,7 @@ import re, math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Mapping, Any
-from rda.quality.contracts import freeze_json
+from rda.quality.contracts import freeze_json, FrozenDict
 
 
 @dataclass
@@ -276,6 +276,7 @@ class QualityReference:
             raise ValueError("dimensions and metrics are required")
         object.__setattr__(self, "dimensions", freeze_json(self.dimensions, path="dimensions"))
         object.__setattr__(self, "applicability", freeze_json(self.applicability, path="applicability"))
+        object.__setattr__(self, "metrics", FrozenDict(dict(self.metrics)))
         for stats in self.metrics.values():
             if not isinstance(stats, MetricStats) or any(not math.isfinite(float(x)) for x in (stats.median, stats.mad, stats.p05, stats.p25, stats.p75, stats.p95)):
                 raise ValueError("invalid metric statistics")
