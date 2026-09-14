@@ -17,6 +17,8 @@ from rda.quality.execution_plan import (
     coverage_summary,
     validate_terminal_results,
 )
+from rda.quality.window_contract import TrainingWindow, WindowParityReport, compare_window_indices, load_training_windows
+from rda.quality.window_diagnostics import WindowDiagnostics, compute_window_diagnostics
 
 __all__ = [
     "Applicability",
@@ -39,6 +41,12 @@ __all__ = [
     "config_hash",
     "coverage_summary",
     "validate_terminal_results",
+    "TrainingWindow",
+    "WindowParityReport",
+    "WindowDiagnostics",
+    "compare_window_indices",
+    "load_training_windows",
+    "compute_window_diagnostics",
 ]
 
 
