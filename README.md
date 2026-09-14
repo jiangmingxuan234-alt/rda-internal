@@ -18,7 +18,7 @@ three-tier verdict per episode — **PASS / REVIEW / EXCLUDE** — together with
 measured diagnostics. Use it as an independent check before you accept a
 vendor dataset, train a policy, or publish a benchmark.
 
-**Current release: v0.9.5** — `pip install robot-data-audit`.
+**Current release: v0.9.6** — `pip install robot-data-audit`.
 
 ## ⭐ Support RDA
 

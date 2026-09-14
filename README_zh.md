@@ -17,7 +17,7 @@ RDA 审计机器人操作数据集（LeRobot 格式），对每一集给出三�
 **PASS / REVIEW / EXCLUDE**——并附测量诊断。适合在验收供应商数据、开训、
 或发布 benchmark 之前做一次独立检查。
 
-**当前版本：v0.9.5** —— `pip install robot-data-audit`。
+**当前版本：v0.9.6** —— `pip install robot-data-audit`。
 
 ## ⭐ 支持 RDA
 
