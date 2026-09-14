@@ -61,6 +61,12 @@ from rda.calibration.portable import (
 from rda.calibration.reference import MetricStats, ReferenceProfile
 from rda.io.schema import EpisodeData
 
+# Quality mode entry point.  This intentionally consumes MeasurementRecord
+# objects and never invokes the legacy EpisodeData extraction path.
+def score_measurements(records, reference, groups=None):
+    from rda.quality.scoring import score_measurements as _score
+    return _score(records, reference, groups)
+
 
 # ---------------------------------------------------------------------------
 # BehavioralScore

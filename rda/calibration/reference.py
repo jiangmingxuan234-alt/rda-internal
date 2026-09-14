@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Mapping, Any
 
 
 @dataclass
@@ -245,3 +245,24 @@ def load_reference(path: str | Path) -> ReferenceProfile:
         A :class:`ReferenceProfile` instance.
     """
     return ReferenceProfile.load(path)
+
+
+@dataclass(frozen=True)
+class QualityReference:
+    """Strict, provenance-bearing reference used by quality mode only."""
+    calibration_id: str
+    calibration_hash: str
+    source_revision: str
+    source_profile_hash: str
+    calculation_version: str
+    dimensions: Mapping[str, Any]
+    sample_count: int
+    applicability: Mapping[str, Any]
+    metrics: Mapping[str, MetricStats]
+
+    def __post_init__(self) -> None:
+        for name in ("calibration_id", "calibration_hash", "source_revision", "source_profile_hash", "calculation_version"):
+            if not isinstance(getattr(self, name), str) or not getattr(self, name).strip():
+                raise ValueError(f"{name} must be non-empty")
+        if self.sample_count <= 0:
+            raise ValueError("sample_count must be positive")
