@@ -1,0 +1,85 @@
+{
+  "contract_version": 1,
+  "quality": {
+    "reference_set": {
+      "id": "internal-provisional-v1"
+    },
+    "metrics": [
+      {
+        "name": "action_discontinuity",
+        "role": "required_for_advice",
+        "parameters": {
+          "mad_tolerance": 5.0
+        },
+        "rule": {
+          "rule_id": "action-discontinuity-v1",
+          "version": "1",
+          "scope": {
+            "all": true
+          },
+          "thresholds": {
+            "value": 0.2
+          },
+          "calibration_status": "uncalibrated",
+          "provisional": true
+        }
+      },
+      {
+        "name": "idle_ratio",
+        "role": "required_for_advice",
+        "parameters": {
+          "activity_epsilon": 0.01
+        },
+        "rule": {
+          "rule_id": "idle-ratio-v1",
+          "version": "1",
+          "scope": {
+            "all": true
+          },
+          "thresholds": {
+            "value": 0.9
+          },
+          "calibration_status": "uncalibrated",
+          "provisional": true
+        }
+      },
+      {
+        "name": "velocity_acceleration",
+        "role": "informational",
+        "parameters": {
+          "smoothing": "none"
+        }
+      },
+      {
+        "name": "visual_quality",
+        "role": "informational",
+        "parameters": {
+          "preprocess": {
+            "roi": "full"
+          }
+        }
+      },
+      {
+        "name": "video_freeze",
+        "role": "informational",
+        "parameters": {
+          "preprocess": {
+            "roi": "full"
+          },
+          "low_change_threshold": 0.0
+        }
+      }
+    ]
+  },
+  "training": {
+    "policy_type": "cosmos_policy",
+    "observation_history": 2,
+    "horizon": 10,
+    "stride": 1,
+    "padding": "none",
+    "required_modalities": [
+      "observation.state",
+      "observation.image"
+    ]
+  }
+}

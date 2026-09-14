@@ -1,0 +1,27 @@
+{
+  "task_id": "pusht",
+  "profile_revision": "1",
+  "metrics": {
+    "idle_ratio": {
+      "parameters": {
+        "activity_epsilon": 17.8
+      },
+      "rule": {
+        "thresholds": {
+          "value": 0.3
+        }
+      }
+    },
+    "action_discontinuity": {
+      "parameters": {
+        "mad_tolerance": 5.0
+      }
+    }
+  },
+  "training": {
+    "required_modalities": [
+      "action",
+      "observation.image"
+    ]
+  }
+}
