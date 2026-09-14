@@ -18,7 +18,7 @@ three-tier verdict per episode — **PASS / REVIEW / EXCLUDE** — together with
 measured diagnostics. Use it as an independent check before you accept a
 vendor dataset, train a policy, or publish a benchmark.
 
-**Current release: v0.9.2** — `pip install robot-data-audit`.
+**Current release: v0.9.4** — `pip install robot-data-audit`.
 
 ## ⭐ Support RDA
 
@@ -79,12 +79,16 @@ pass" banner.
 
 ```bash
 # 1. Audit a dataset — 21 metrics across four layers, three-tier verdicts
+#    Default: Fast Audit (all metrics except visual_quality)
 rda audit /path/to/lerobot/dataset
 
-# 2. Recommendations calibrated to your model type
+# 2. Include visual quality analysis
+rda audit /path/to/lerobot/dataset --video-quality
+
+# 3. Recommendations calibrated to your model type
 rda recommend /path/to/dataset --policy temporal   # or frame-wise
 
-# 3. Optional web dashboard
+# 4. Optional web dashboard
 rda ui
 ```
 
@@ -95,6 +99,25 @@ not-checked inventory). `rda recommend` computes all metrics locally and
 sends only aggregated statistics (<1 KB) to the rules API — cached for
 offline reuse, and `RDA_API_URL` can point to your own server for private
 deployments.
+
+### Execution tiers
+
+Visual quality analysis (`visual_quality`) involves frame decoding and is
+significantly slower than other metrics. RDA v0.9.4 introduces **tiered
+execution** so you can control which metrics run:
+
+| Mode | Flag | What runs |
+|---|---|---|
+| **Fast Audit** | *(default)* | All 21 metrics **except** `visual_quality` |
+| **Video Quality** | `--video-quality` | All 21 metrics, including `visual_quality` |
+| **No Video** | `--no-video` | All metrics except video-related (9 video metrics skipped) |
+| **Video Only** | `--video-only` | Only the 9 video-related metrics |
+| **Full Audit** | `--full` | All 21 metrics, including `visual_quality` |
+
+Flags are mutually exclusive. The JSON report (schema v1.2) includes an
+`execution_tier` field and a `video_quality` block indicating whether
+visual quality was executed and why. The text report header shows the
+active tier and whether visual quality was skipped.
 
 ### Programmatic use
 
@@ -129,9 +152,12 @@ configurable `approach_threshold` / `consecutive_frames` / `jump_multiplier`)
 
 **L2 — Trajectory Diagnostics (observational, never EXCLUDE)**
 `sensor_sync` · `sampling_jitter` · `velocity_acceleration` ·
-`action_discontinuity` (MAD-based spike detection) · `visual_quality` ·
+`action_discontinuity` (MAD-based spike detection) · `visual_quality` ⚡ ·
 `video_stream_span_consistency` · `video_stream_temporal_offset` ·
 `video_stream_temporal_drift`
+
+> ⚡ `visual_quality` requires frame decoding and is **skipped by default**
+> (Fast Audit). Enable with `--video-quality` or `--full`.
 
 **L3 — Dataset Profile (efficiency & coverage)**
 `idle_ratio` (three-tier fallback: 30-bin valley → 3×MAD → 1e-6 floor) ·
@@ -148,7 +174,7 @@ Tier-3 platform-specific (joint limits, workspace, torque/force/tactile).
 **12 local datasets, 4,959 episodes, one set of default thresholds, zero
 per-dataset tuning** — full table in [docs/benchmark.md](docs/benchmark.md).
 
-**Four popular LeRobot datasets audited (v0.9.2)** — we ran RDA against
+**Four popular LeRobot datasets audited (v0.9.4)** — we ran RDA against
 `lerobot/pusht`, `aloha_sim_transfer_cube_human`, `xarm_lift_medium` and
 `droid_100` (1,156 episodes across a 2-DOF sim, a 14-DOF bimanual sim, a
 4-DOF arm and a 7-DOF Franka). All episodes pass L1 integrity; the dataset

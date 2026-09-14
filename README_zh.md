@@ -17,7 +17,7 @@ RDA 审计机器人操作数据集（LeRobot 格式），对每一集给出三�
 **PASS / REVIEW / EXCLUDE**——并附测量诊断。适合在验收供应商数据、开训、
 或发布 benchmark 之前做一次独立检查。
 
-**当前版本：v0.9.2** —— `pip install robot-data-audit`。
+**当前版本：v0.9.4** —— `pip install robot-data-audit`。
 
 ## ⭐ 支持 RDA
 
@@ -72,12 +72,16 @@ pip install robot-data-audit
 
 ```bash
 # 1. 审计数据集 —— 四层共 21 个指标，三档判定
+#    默认：Fast Audit（除 visual_quality 外的所有指标）
 rda audit /path/to/lerobot/dataset
 
-# 2. 按目标模型类型给出优化建议
+# 2. 包含视觉质量分析
+rda audit /path/to/lerobot/dataset --video-quality
+
+# 3. 按目标模型类型给出优化建议
 rda recommend /path/to/dataset --policy temporal   # 或 frame-wise
 
-# 3. 可选的网页面板
+# 4. 可选的网页面板
 rda ui
 ```
 
@@ -86,6 +90,23 @@ measurement/finding，以及数据集级 `acceptance_summary`（P10/P50/P90 基�
 运行时离群值、未检查清单）。`rda recommend` 在本地完成全部指标计算，只把聚合
 统计（<1 KB）发给规则 API——结果本地缓存可离线复用，私有部署可用
 `RDA_API_URL` 指向自己的服务器。
+
+### 执行层级
+
+视觉质量分析（`visual_quality`）需要逐帧解码，耗时显著高于其他指标。v0.9.4 引入
+**分层执行模型**，让你灵活控制运行哪些指标：
+
+| 模式 | 参数 | 运行范围 |
+|---|---|---|
+| **Fast Audit** | *（默认）* | 全部 21 个指标，**跳过** `visual_quality` |
+| **Video Quality** | `--video-quality` | 全部 21 个指标，**含** `visual_quality` |
+| **No Video** | `--no-video` | 除视频相关（9 项）外的所有指标 |
+| **Video Only** | `--video-only` | 仅 9 项视频相关指标 |
+| **Full Audit** | `--full` | 全部 21 个指标，含 `visual_quality` |
+
+参数互斥。JSON 报告（schema v1.2）新增 `execution_tier` 字段和
+`video_quality` 区块，说明是否执行了视觉质量分析及其原因。文本报告头部也会
+展示当前层级和 visual_quality 跳过状态。
 
 ### 代码调用
 
@@ -120,9 +141,12 @@ for name, metric in result.metrics.items():
 
 **L2 — 轨迹诊断（观测性，不判 EXCLUDE）**
 `sensor_sync` · `sampling_jitter` · `velocity_acceleration` ·
-`action_discontinuity`（基于 MAD 的突变检测）· `visual_quality` ·
+`action_discontinuity`（基于 MAD 的突变检测）· `visual_quality` ⚡ ·
 `video_stream_span_consistency` · `video_stream_temporal_offset` ·
 `video_stream_temporal_drift`
+
+> ⚡ `visual_quality` 需要逐帧解码，**默认不运行**（Fast Audit）。
+> 需要时通过 `--video-quality` 或 `--full` 开启。
 
 **L3 — 数据集画像（效率与覆盖）**
 `idle_ratio`（三级回退：30-bin 谷底 → 3×MAD → 1e-6 下限）·
@@ -138,7 +162,7 @@ Tier-3 平台专属（关节限位、工作空间、力矩/力/触觉）。
 **12 个本地数据集、4,959 集、同一套默认阈值、零调参**——完整表格见
 [docs/benchmark.md](docs/benchmark.md)。
 
-**四个热门 LeRobot 数据集实测（v0.9.2）**——我们用 RDA 跑了
+**四个热门 LeRobot 数据集实测（v0.9.4）**——我们用 RDA 跑了
 `lerobot/pusht`、`aloha_sim_transfer_cube_human`、`xarm_lift_medium` 和
 `droid_100`（共 1,156 集，覆盖 2-DOF 仿真、14-DOF 双臂仿真、4-DOF 单臂和
 7-DOF Franka）。全部通过 L1 完整性；但数据集画像差异显著——中位空闲帧占比
