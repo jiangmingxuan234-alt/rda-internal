@@ -66,9 +66,10 @@ def _arrays(episode: EpisodeData, config: QualityConfig) -> tuple[np.ndarray | N
     return action, state
 
 
-def compute_shared_features(episode: EpisodeData, config: QualityConfig, *, producer_binding: Mapping[str, Any] | None = None) -> SharedFeatures:
+def compute_shared_features(episode: EpisodeData, config: QualityConfig, *, producer_binding: Mapping[str, Any] | None = None, parameters: Mapping[str, Any] | None = None) -> SharedFeatures:
     """Compute explicit action/state observations without a legacy metric call."""
     action, state = _arrays(episode, config)
+    parameters = parameters or {}
     binding = validate_semantic_binding(config.robot, producer_binding) if config.robot is not None else None
     semantic = "BOUND" if binding is not None else "UNKNOWN"
     numeric: dict[str, Any] = {"timestamps": {"sample_count": int(len(episode.timestamps)), "minimum_samples": 2}}
@@ -128,12 +129,15 @@ def compute_shared_features(episode: EpisodeData, config: QualityConfig, *, prod
             if dimension_discrete:
                 transitions = np.flatnonzero(np.diff(values) != 0)
                 entry["transitions"] = [int(v) for v in transitions]
+                if kind == "action" and semantic == "BOUND":
+                    entry["activity_count"] = int(transitions.size)
+                    entry["activity_runs"] = _runs(np.r_[False, np.diff(values) != 0])
                 entry["value_counts"] = {str(value): int(count) for value, count in zip(*np.unique(values, return_counts=True))}
             else:
                 entry["delta"] = _delta(values, period=dimension_period)
                 if kind == "action":
                     if semantic == "BOUND" and dimension_representation in {"velocity", "delta_position"}:
-                        mask = np.abs(values) > 0
+                        mask = np.abs(values) > float(parameters.get("activity_epsilon", 0.0))
                         entry["activity_count"] = int(np.count_nonzero(mask))
                         entry["activity_runs"] = _runs(mask)
                         entry["idle_count"] = int(mask.size - np.count_nonzero(mask))
@@ -150,7 +154,7 @@ def compute_shared_features(episode: EpisodeData, config: QualityConfig, *, prod
                         derivative = state_delta / np.diff(timestamps)
                         unit = str(semantics.get("unit", "unknown")) + "/s"
                         acceleration = np.diff(derivative) / np.diff(timestamps)[1:] if len(derivative) >= 2 else np.array([])
-                        derivative_fact = _stat(derivative) | {"values": [float(value) for value in derivative], "locations": [int(value) for value in range(len(derivative))], "unit": unit, "difference": "wrapped_first_difference" if dimension_period is not None else "first_difference", "smoothing": "none", "status": "ok" if np.all(np.isfinite(derivative)) else "nonfinite_sample", "acceleration": _stat(acceleration) | {"values": [float(value) for value in acceleration], "locations": [int(value + 1) for value in range(len(acceleration))], "unit": unit + "/s"}}
+                        derivative_fact = _stat(derivative) | {"values": [float(value) if np.isfinite(value) else None for value in derivative], "locations": [int(value) for value in range(len(derivative))], "unit": unit, "difference": "wrapped_first_difference" if dimension_period is not None else "first_difference", "smoothing": str(parameters.get("smoothing", "none")), "status": "ok" if np.all(np.isfinite(derivative)) else "nonfinite_sample", "acceleration": _stat(acceleration) | {"values": [float(value) if np.isfinite(value) else None for value in acceleration], "locations": [int(value + 1) for value in range(len(acceleration))], "unit": unit + "/s"}}
                         entry["derivative"] = derivative_fact
                     else:
                         entry["derivative"] = {"status": "UNASSESSED" if semantic == "UNKNOWN" else "invalid_timestamps"}

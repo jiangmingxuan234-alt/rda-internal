@@ -56,7 +56,7 @@ def measure_unit(unit: PlanUnit, episode: EpisodeData, media: Any, config: Quali
         return MeasurementRecord(unit.plan_unit_id, unit.metric, ALGORITHM_VERSION, config.effective_config_hash,
                                  Applicability.APPLICABLE if visual.coverage["computed_samples"] else Applicability.UNKNOWN,
                                  visual.coverage, {"frames": visual.frames, "low_change_spans": visual.low_change_spans, "preprocess": visual.preprocess}, visual.failures)
-    features = compute_shared_features(episode, config, producer_binding=unit.input_references.get("robot_profile"))
+    features = compute_shared_features(episode, config, producer_binding=unit.input_references.get("robot_profile"), parameters=params)
     needed = {"action_discontinuity", "idle_ratio"}
     source_failures = [kind for kind in (("action",) if unit.metric in needed else ("state",)) if features.numeric.get(kind, {}).get("status") in {"missing_source", "invalid_shape", "nonnumeric_source"}]
     if source_failures:
@@ -88,11 +88,12 @@ def measure_unit(unit: PlanUnit, episode: EpisodeData, media: Any, config: Quali
     elif unit.metric == "action_discontinuity":
         values = {"action_deltas": {index: item.get("delta", {}) for index, item in values["numeric"].get("action", {}).get("dimensions", {}).items()}}
     timestamp_error = features.numeric["timestamps"].get("status") != "ok"
+    nonfinite_fact = any(item.get("statistics", {}).get("missing_count", 0) for item in values["numeric"].get("state", {}).get("dimensions", {}).values())
     coverage = {"planned_samples": episode.num_frames, "attempted_samples": episode.num_frames,
                 "computed_samples": 0 if timestamp_error else episode.num_frames}
-    if timestamp_error:
+    if timestamp_error or nonfinite_fact or features.semantic_status != "BOUND":
         return MeasurementRecord(unit.plan_unit_id, unit.metric, ALGORITHM_VERSION, config.effective_config_hash,
-                                 Applicability.UNKNOWN, coverage, values, ({"reason": "invalid_timestamps"},))
+                                 Applicability.UNKNOWN, coverage, values, ({"reason": "invalid_timestamps" if timestamp_error else ("nonfinite_samples" if nonfinite_fact else "semantic_profile_missing")},))
     return MeasurementRecord(unit.plan_unit_id, unit.metric, ALGORITHM_VERSION,
                              config.effective_config_hash, Applicability.APPLICABLE,
                              coverage, values, ())
