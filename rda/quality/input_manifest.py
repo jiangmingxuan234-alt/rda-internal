@@ -249,8 +249,17 @@ def load_quality_manifest(path: Path) -> QualityInputManifest:
     version = _integer(_required(root, "contract_version", "manifest"), "contract_version", minimum=1)
     if version != 1:
         raise _error("unsupported_contract", f"unsupported contract_version: {version}", "contract_version")
-    root_value = _relative_path(_required(root, "dataset_root", "manifest"), "dataset_root")
-    dataset_root = (path.parent / root_value).resolve()
+    # Manifests are often emitted into a run directory outside the immutable
+    # dataset.  Permit an explicit absolute dataset root while retaining the
+    # strict relative-path rules for every source and artifact reference.
+    raw_dataset_root = _required(root, "dataset_root", "manifest")
+    if isinstance(raw_dataset_root, str) and Path(raw_dataset_root).is_absolute():
+        dataset_root = Path(raw_dataset_root).resolve()
+        if not dataset_root.is_dir():
+            raise _error("invalid_manifest", "dataset_root must resolve to a directory", "dataset_root")
+    else:
+        root_value = _relative_path(raw_dataset_root, "dataset_root")
+        dataset_root = (path.parent / root_value).resolve()
 
     producer = _mapping(_required(root, "producer", "manifest"), "producer")
     run_id = _text(_required(producer, "robovet_run_id", "producer"), "producer.robovet_run_id")

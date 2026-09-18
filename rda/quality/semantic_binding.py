@@ -17,7 +17,7 @@ _SIGNAL_REQUIRED = {"name", "role", "source_field", "dtype", "shape", "unit", "q
 _BINDING_FIELDS = {"profile_revision", "profile_content_hash", "mapping_version", "mapping_hash", "source_profile"}
 _GROUP_REQUIRED = {"indices", "physical_quantity", "unit", "reference_frame", "representation"}
 _COMPATIBILITY = {
-    "absolute_position": {"angle": {"rad", "deg"}, "position": {"m", "mm"}, "length": {"m", "mm"}},
+    "absolute_position": {"angle": {"rad", "deg"}, "position": {"m", "mm", "sim_unit"}, "position_command": {"sim_unit"}, "length": {"m", "mm"}},
     "delta_position": {"angle": {"rad", "deg"}, "position": {"m", "mm"}, "length": {"m", "mm"}},
     "velocity": {"angular_velocity": {"rad/s", "deg/s"}, "velocity": {"m/s", "mm/s"}, "linear_velocity": {"m/s", "mm/s"}},
     "torque": {"torque": {"N*m", "Nm"}}, "force": {"force": {"N"}},
@@ -121,7 +121,10 @@ def validate_robot_mapping(robot: Mapping[str, Any]) -> Mapping[str, Any] | None
         mapping = _object(mapping, f"signal_mappings.{kind}", {"signal_name", "groups"})
         _text(mapping["signal_name"], "mapping.signal_name")
         signal = signals.get(mapping["signal_name"])
-        if signal is None or signal["role"] != kind or signal["source_field"] != robot[kind + "_field"]:
+        expected_field = robot[kind + "_field"]
+        source_field = signal.get("source_field") if signal is not None else None
+        field_matches = source_field == expected_field or source_field == f"observation.{expected_field}"
+        if signal is None or signal["role"] != kind or not field_matches:
             raise ValueError(f"signal_mappings.{kind} source signal role/field mismatch")
         groups = mapping["groups"]
         if not isinstance(groups, Mapping) or not groups:
